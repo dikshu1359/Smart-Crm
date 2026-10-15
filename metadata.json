@@ -1,0 +1,8 @@
+{
+  "name": "EduSync CRM",
+  "description": "A modern, multi-tenant CRM for educational institutions featuring advanced scheduling, performance analytics, and integrated assignment management systems.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
