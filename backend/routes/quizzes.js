@@ -14,11 +14,12 @@ router.use(tenantAuth);
  */
 router.get('/', async (req, res) => {
   try {
-    const { role } = req.user;
+    const role = req.user?.role || 'admin';
+    const userId = req.user?.id;
     let query = {};
 
-    if (role === 'student') {
-      const student = await req.tenantDb.User.findById(req.user.id);
+    if (role === 'student' && userId && userId !== 'system') {
+      const student = await req.tenantDb.User.findById(userId);
       if (!student?.assignedClassId) {
         return res.json({ quizzes: [], attempts: [] });
       }
@@ -26,16 +27,16 @@ router.get('/', async (req, res) => {
         targetClassIds: student.assignedClassId,
         isPublished: true,
       };
-    } else if (role === 'teacher') {
-      query = { teacherId: req.user.id };
+    } else if (role === 'teacher' && userId && userId !== 'system') {
+      query = { teacherId: userId };
     }
 
     const quizzes = await req.tenantDb.Quiz.find(query).sort({ createdAt: -1 });
 
     // Fetch attempts
     let attempts = [];
-    if (role === 'student') {
-      attempts = await req.tenantDb.QuizAttempt.find({ studentId: req.user.id });
+    if (role === 'student' && userId && userId !== 'system') {
+      attempts = await req.tenantDb.QuizAttempt.find({ studentId: userId });
     } else {
       const quizIds = quizzes.map((q) => q._id.toString());
       attempts = await req.tenantDb.QuizAttempt.find({ quizId: { $in: quizIds } });
@@ -44,12 +45,14 @@ router.get('/', async (req, res) => {
     // For students, sanitize correctOptionIndex if quiz is active and not submitted
     const formattedQuizzes = quizzes.map((q) => {
       const qObj = q.toObject();
+      qObj.id = q._id.toString();
       if (role === 'student') {
         const studentAttempt = attempts.find((a) => a.quizId === q._id.toString());
         if (!studentAttempt) {
           // Hide correct answers prior to attempt completion
           qObj.questions = qObj.questions.map((ques) => ({
             _id: ques._id,
+            id: ques._id?.toString(),
             questionText: ques.questionText,
             options: ques.options,
             marks: ques.marks,
@@ -59,7 +62,12 @@ router.get('/', async (req, res) => {
       return qObj;
     });
 
-    res.json({ quizzes: formattedQuizzes, attempts });
+    const formattedAttempts = attempts.map((a) => ({
+      ...(a.toObject ? a.toObject() : a),
+      id: a._id?.toString() || a.id,
+    }));
+
+    res.json({ quizzes: formattedQuizzes, attempts: formattedAttempts });
   } catch (err) {
     res.status(500).json({ error: 'FetchQuizzesError', message: err.message });
   }

@@ -11,15 +11,20 @@ router.use(tenantAuth);
  */
 router.get('/', async (req, res) => {
   try {
-    const query = {
-      $or: [{ targetRole: 'all' }, { targetRole: req.user.role }],
-    };
-    if (req.user.role === 'admin') {
-      delete query.$or; // Admin can see all notices
+    const role = req.user?.role || 'all';
+    let query = {};
+    if (role !== 'admin' && role !== 'all') {
+      query = {
+        $or: [{ targetRole: 'all' }, { targetRole: role }],
+      };
     }
 
     const notices = await req.tenantDb.Notice.find(query).sort({ createdAt: -1 });
-    res.json({ notices, count: notices.length });
+    const formatted = notices.map((n) => ({
+      ...n.toObject(),
+      id: n._id.toString(),
+    }));
+    res.json({ notices: formatted, count: formatted.length });
   } catch (err) {
     res.status(500).json({ error: 'FetchNoticesError', message: err.message });
   }

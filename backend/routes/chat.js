@@ -20,26 +20,30 @@ function getConversationId(userId1, userId2) {
  */
 router.get('/contacts', async (req, res) => {
   try {
-    const { role } = req.user;
-    let query = { _id: { $ne: req.user.id }, status: 'active' };
+    const role = req.user?.role || 'admin';
+    const userId = req.user?.id;
+    let query = { status: 'active' };
+    if (userId && userId !== 'system') {
+      query._id = { $ne: userId };
+    }
 
     if (role === 'admin') {
       query.role = { $in: ['teacher', 'student'] };
-    } else if (role === 'teacher') {
-      const teacher = await req.tenantDb.User.findById(req.user.id);
+    } else if (role === 'teacher' && userId && userId !== 'system') {
+      const teacher = await req.tenantDb.User.findById(userId);
       const assignedClassIds = teacher?.assignedClassIds || [];
       query = {
-        _id: { $ne: req.user.id },
+        _id: { $ne: userId },
         $or: [
           { role: 'admin' },
           { role: 'student', assignedClassId: { $in: assignedClassIds } },
         ],
       };
-    } else if (role === 'student') {
-      const student = await req.tenantDb.User.findById(req.user.id);
+    } else if (role === 'student' && userId && userId !== 'system') {
+      const student = await req.tenantDb.User.findById(userId);
       const studentClassId = student?.assignedClassId;
       query = {
-        _id: { $ne: req.user.id },
+        _id: { $ne: userId },
         $or: [
           { role: 'admin' },
           { role: 'teacher', assignedClassIds: studentClassId },
@@ -50,10 +54,13 @@ router.get('/contacts', async (req, res) => {
     const contacts = await req.tenantDb.User.find(query).select('fullName username role email specialization assignedClassId').lean();
 
     // Get unread counts per contact
-    const unreadMessages = await req.tenantDb.Message.find({
-      recipientId: req.user.id,
-      read: false,
-    });
+    let unreadMessages = [];
+    if (userId && userId !== 'system') {
+      unreadMessages = await req.tenantDb.Message.find({
+        recipientId: userId,
+        read: false,
+      });
+    }
 
     const contactsWithUnread = contacts.map((c) => {
       const unreadCount = unreadMessages.filter((m) => m.senderId === c._id.toString()).length;

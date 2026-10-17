@@ -158,9 +158,11 @@ router.get('/me', tenantAuth, async (req, res) => {
 
     const masterDb = await dbManager.getMasterDB();
     const inst = await masterDb.Institution.findOne({ databaseName: req.databaseName });
+    const userObj = userDoc.toObject();
+    userObj.id = userDoc._id.toString();
 
     res.json({
-      user: userDoc,
+      user: userObj,
       databaseName: req.databaseName,
       tenant: {
         databaseName: req.databaseName,

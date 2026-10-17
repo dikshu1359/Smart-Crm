@@ -15,15 +15,16 @@ import {
   AlertCircle,
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
+import { InstitutionRegistry, TenantUser } from '../types/crm';
 
 export const NewLandingPage: React.FC = () => {
   const {
-    state,
+    institutions,
+    users,
     activeTenant,
     currentUser,
     setCurrentView,
-    switchPersona,
-    crossDatabaseLogin,
+    login,
     registerInstitution,
   } = useApp();
 
@@ -53,9 +54,10 @@ export const NewLandingPage: React.FC = () => {
     setTilt({ rotateX: 7, rotateY: -11 });
   };
 
-  const handleLoginSubmit = (e: React.FormEvent) => {
+  const handleLoginSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    const res = crossDatabaseLogin(loginInput);
+    if (!loginInput.trim()) return;
+    const res = await login(loginInput.trim(), 'password');
     if (!res.ok) {
       setLoginFeedback({ type: 'error', text: res.message });
     } else {
@@ -64,20 +66,25 @@ export const NewLandingPage: React.FC = () => {
     }
   };
 
-  const handleRegisterSubmit = (e: React.FormEvent) => {
+  const handleRegisterSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!instName.trim() || !adminUser.trim() || !adminFullName.trim() || !adminEmail.trim()) {
       setRegError('All institutional registration fields are required.');
       return;
     }
-    registerInstitution({
+    const res = await registerInstitution({
       institutionName: instName.trim(),
       adminUsername: adminUser.trim(),
       adminName: adminFullName.trim(),
       adminEmail: adminEmail.trim(),
+      password: 'password123',
       campusCode: campusCode.trim() || 'CAMPUS-01',
     });
-    setAuthModalMode('none');
+    if (!res.ok) {
+      setRegError(res.message);
+    } else {
+      setAuthModalMode('none');
+    }
   };
 
   const previewSlug = adminUser ? adminUser.toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 16) : 'institution';
@@ -137,7 +144,7 @@ export const NewLandingPage: React.FC = () => {
 
             <p className="text-base text-slate-300 leading-relaxed max-w-xl">
               Automatic database creation on registration, conflict-free schedule management,
-              and multi-class assignment workflows with grading and Recharts analytics.
+              and multi-class assignment workflows with grading and analytics.
             </p>
 
             <div className="flex flex-wrap items-center gap-4 pt-2">
@@ -167,37 +174,17 @@ export const NewLandingPage: React.FC = () => {
                 }}
                 className="px-4 py-3 text-sm font-medium text-purple-300 hover:text-white cursor-pointer"
               >
-                Cross-DB Login
+                Sign In
               </button>
             </div>
 
-            <div className="pt-4 border-t border-white/10">
-              <p className="text-xs text-slate-400 mb-3">
-                Instant Role Access &mdash; Switch to active tenant ({activeTenant.databaseName}):
-              </p>
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
-                {(['admin', 'teacher', 'student'] as const).map((role) => {
-                  const userForRole = activeTenant.users.find((u) => u.role === role);
-                  if (!userForRole) return null;
-                  const isCurrent = currentUser.id === userForRole.id;
-                  return (
-                    <button
-                      key={role}
-                      onClick={() => switchPersona(activeTenant.databaseName, userForRole.id)}
-                      className={`text-left p-3 rounded-xl border transition-all cursor-pointer ${
-                        isCurrent
-                          ? 'bg-purple-600/20 border-purple-400 text-white'
-                          : 'bg-white/[0.03] border-white/10 text-slate-300 hover:border-purple-400/50'
-                      }`}
-                    >
-                      <div className="text-xs font-semibold capitalize text-purple-300">{role} View</div>
-                      <div className="text-sm font-medium text-white truncate">{userForRole.fullName}</div>
-                      <div className="text-[11px] font-mono text-slate-400 truncate">@{userForRole.username}</div>
-                    </button>
-                  );
-                })}
+            {activeTenant && (
+              <div className="pt-4 border-t border-white/10">
+                <p className="text-xs text-slate-400 mb-3">
+                  Active Institution: <span className="text-white font-semibold">{activeTenant.institutionName}</span> ({activeTenant.databaseName})
+                </p>
               </div>
-            </div>
+            )}
           </div>
 
           {/* 3D Glass Stage */}
@@ -220,19 +207,19 @@ export const NewLandingPage: React.FC = () => {
                   <div className="text-base font-bold text-white font-display">smart_crm_master &rarr; Tenants</div>
                 </div>
                 <span className="text-xs font-mono text-pink-300">
-                  {state.masterDb.institutions.length} Active Databases
+                  {institutions.length} Active Databases
                 </span>
               </div>
 
               <div className="space-y-3 mb-5">
-                {state.masterDb.institutions.slice(0, 2).map((inst) => (
+                {institutions.slice(0, 2).map((inst: InstitutionRegistry) => (
                   <div key={inst.id} className="p-3.5 rounded-xl bg-white/[0.03] border border-white/10 flex justify-between">
                     <div>
                       <div className="text-sm font-semibold text-white">{inst.institutionName}</div>
                       <div className="text-xs font-mono text-purple-300">{inst.databaseName}</div>
                     </div>
                     <div className="text-xs text-slate-400 font-mono text-right">
-                      {state.tenants[inst.databaseName]?.users.length || 0} Users
+                      Admin: {inst.adminName}
                     </div>
                   </div>
                 ))}
@@ -249,7 +236,7 @@ export const NewLandingPage: React.FC = () => {
                 </div>
                 <div className="p-2.5 rounded-xl bg-fuchsia-950/30 border border-fuchsia-500/20">
                   <div className="text-slate-400">Audit Logs</div>
-                  <div className="font-mono text-white font-bold mt-1">{state.masterDb.masterLogs.length} Events</div>
+                  <div className="font-mono text-white font-bold mt-1">Active Tracker</div>
                 </div>
               </div>
             </div>
@@ -291,7 +278,7 @@ export const NewLandingPage: React.FC = () => {
           <div className="bg-[#141124] rounded-2xl max-w-md w-full p-6 border border-white/15">
             <div className="flex justify-between items-center pb-3 mb-4 border-b border-white/10">
               <h3 className="text-lg font-bold text-white font-display">
-                {authModalMode === 'login' ? 'Cross-Database Login' : 'Register New Institution'}
+                {authModalMode === 'login' ? 'Institutional Sign In' : 'Register New Institution'}
               </h3>
               <button onClick={() => setAuthModalMode('none')} className="text-slate-400 hover:text-white cursor-pointer">
                 <X className="w-4 h-4" />
@@ -304,6 +291,7 @@ export const NewLandingPage: React.FC = () => {
                   <label className="block text-xs font-medium text-slate-300 mb-1">Username or Email</label>
                   <input
                     type="text"
+                    required
                     value={loginInput}
                     onChange={(e) => setLoginInput(e.target.value)}
                     placeholder="e.g., stxaviers, erostova, asharma"

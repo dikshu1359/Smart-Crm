@@ -19,7 +19,11 @@ router.get('/', async (req, res) => {
     }
 
     const users = await req.tenantDb.User.find(query).select('-passwordHash').sort({ createdAt: -1 });
-    res.json({ users, count: users.length });
+    const formatted = users.map((u) => ({
+      ...u.toObject(),
+      id: u._id.toString(),
+    }));
+    res.json({ users: formatted, count: formatted.length });
   } catch (err) {
     res.status(500).json({ error: 'FetchUsersError', message: err.message });
   }
@@ -61,18 +65,28 @@ router.post('/', authorizeRoles('admin'), async (req, res) => {
       });
     }
 
-    // Check duplicate username in this tenant
-    const existing = await req.tenantDb.User.findOne({
+    // Check duplicate username or email in this tenant
+    const existingUser = await req.tenantDb.User.findOne({
       $or: [{ username: username.trim().toLowerCase() }, { email: email.trim().toLowerCase() }],
     });
-    if (existing) {
+    if (existingUser) {
+      const isUsernameDuplicate = existingUser.username === username.trim().toLowerCase();
       return res.status(409).json({
         error: 'UserExists',
-        message: `Username or email "${username}" is already in use at this institution.`,
+        message: isUsernameDuplicate
+          ? `Username "${username.trim()}" is already taken in this institution. Please choose a different username.`
+          : `Email address "${email.trim()}" is already registered for another account in this institution.`,
       });
     }
 
-    const initialPassword = password || `${role}123`;
+    if (password && password.trim().length < 6) {
+      return res.status(400).json({
+        error: 'WeakPassword',
+        message: 'Password must be at least 6 characters long.',
+      });
+    }
+
+    const initialPassword = password?.trim() || `${role}@${Math.floor(1000 + Math.random() * 9000)}`;
     const passwordHash = bcrypt.hashSync(initialPassword, 10);
 
     const user = await req.tenantDb.User.create({
@@ -112,15 +126,16 @@ router.post('/', authorizeRoles('admin'), async (req, res) => {
 
     await dbManager.logActivity({
       databaseName: req.databaseName,
-      institutionName: req.user.institutionName,
-      actorName: req.user.fullName,
-      actorRole: req.user.role,
+      institutionName: req.user?.institutionName || '',
+      actorName: req.user?.fullName || 'Admin',
+      actorRole: req.user?.role || 'admin',
       actionCategory: 'USER_MGMT',
       description: `Created new ${role} account for ${user.fullName} (${user.username})`,
     });
 
     const userObj = user.toObject();
     delete userObj.passwordHash;
+    userObj.id = user._id.toString();
 
     res.status(201).json({
       success: true,

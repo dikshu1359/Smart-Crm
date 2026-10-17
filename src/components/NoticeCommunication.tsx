@@ -1,15 +1,18 @@
 import React, { useState } from 'react';
 import { Bell, Plus, CheckCircle2, Trash2, X } from 'lucide-react';
 import { useApp } from '../context/AppContext';
+import { NoticeItem } from '../types/crm';
 
 export const NoticeCommunication: React.FC = () => {
-  const { activeTenant, currentUser, createNotice, deleteNotice, markNoticeRead } = useApp();
+  const { activeTenant, currentUser, notices, createNotice, deleteNotice, markNoticeRead } = useApp();
+  if (!activeTenant || !currentUser) return null;
+
   const [showModal, setShowModal] = useState(false);
   const [title, setTitle] = useState('');
   const [content, setContent] = useState('');
 
-  const visibleNotices = activeTenant.notices.filter(
-    (n) => currentUser.role === 'admin' || n.targetRole === 'all' || n.targetRole === currentUser.role
+  const visibleNotices = notices.filter(
+    (n: NoticeItem) => currentUser.role === 'admin' || n.targetRole === 'all' || n.targetRole === currentUser.role
   );
 
   const handlePublish = (e: React.FormEvent) => {
@@ -44,10 +47,11 @@ export const NoticeCommunication: React.FC = () => {
       </div>
 
       <div className="space-y-4">
-        {visibleNotices.map((n) => {
-          const isRead = n.readByUserIds.includes(currentUser.id);
+        {visibleNotices.map((n: NoticeItem, idx: number) => {
+          const nKey = n.id || (n as any)._id || n.title || `notice-${idx}`;
+          const isRead = n.readByUserIds?.includes(currentUser.id);
           return (
-            <div key={n.id} className="p-5 rounded-2xl bg-white/[0.03] border border-white/10 flex justify-between items-start gap-4">
+            <div key={nKey} className="p-5 rounded-2xl bg-white/[0.03] border border-white/10 flex justify-between items-start gap-4">
               <div className="space-y-2 flex-1">
                 <div className="text-xs text-purple-300 font-medium">
                   {n.category} &middot; By {n.authorName} &middot; {new Date(n.createdAt).toLocaleDateString()}
@@ -59,14 +63,14 @@ export const NoticeCommunication: React.FC = () => {
               <div className="flex items-center gap-2">
                 {!isRead && (
                   <button
-                    onClick={() => markNoticeRead(n.id)}
-                    className="px-2.5 py-1 text-xs bg-purple-600/30 text-purple-200 rounded-lg"
+                    onClick={() => markNoticeRead(n.id!)}
+                    className="px-2.5 py-1 text-xs bg-purple-600/30 text-purple-200 rounded-lg cursor-pointer"
                   >
                     Mark Read
                   </button>
                 )}
                 {currentUser.role === 'admin' && (
-                  <button onClick={() => deleteNotice(n.id)} className="text-slate-400 hover:text-red-400">
+                  <button onClick={() => deleteNotice(n.id!)} className="text-slate-400 hover:text-red-400 cursor-pointer">
                     <Trash2 className="w-3.5 h-3.5" />
                   </button>
                 )}

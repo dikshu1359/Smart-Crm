@@ -214,8 +214,8 @@ export const QuizManagement: React.FC = () => {
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {quizzes.map((quiz) => {
-            const quizId = quiz._id || quiz.id!;
+          {quizzes.map((quiz, qIdx) => {
+            const quizId = quiz.id || quiz._id || quiz.title || `quiz-${qIdx}`;
             const myAttempt = quizAttempts.find((a) => a.quizId === quizId);
             const totalAttempts = quizAttempts.filter((a) => a.quizId === quizId).length;
 

@@ -14,6 +14,7 @@ router.get('/', async (req, res) => {
     const classes = await req.tenantDb.Class.find().sort({ createdAt: -1 });
     const formatted = classes.map((c) => ({
       ...c.toObject(),
+      id: c._id.toString(),
       studentCount: c.studentIds?.length || 0,
     }));
     res.json({ classes: formatted, count: formatted.length });

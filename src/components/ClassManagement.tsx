@@ -1,9 +1,12 @@
 import React, { useState } from 'react';
 import { Plus, Trash2, Users, BookOpen, X } from 'lucide-react';
 import { useApp } from '../context/AppContext';
+import { SchoolClass, TenantUser } from '../types/crm';
 
 export const ClassManagement: React.FC = () => {
-  const { activeTenant, currentUser, createClass, deleteClass, allotStudentToClass } = useApp();
+  const { activeTenant, currentUser, classes, users, createClass, deleteClass, allotStudent } = useApp();
+  if (!activeTenant || !currentUser) return null;
+
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [name, setName] = useState('');
   const [gradeLevel, setGradeLevel] = useState('Grade 12');
@@ -11,9 +14,9 @@ export const ClassManagement: React.FC = () => {
   const [roomNumber, setRoomNumber] = useState('Room 204');
   const [capacity, setCapacity] = useState(30);
 
-  const teachers = activeTenant.users.filter((u) => u.role === 'teacher');
-  const students = activeTenant.users.filter((u) => u.role === 'student');
-  const [primaryTeacherId, setPrimaryTeacherId] = useState(teachers[0]?.id || '');
+  const teacherList = users.filter((u: TenantUser) => u.role === 'teacher');
+  const studentList = users.filter((u: TenantUser) => u.role === 'student');
+  const [primaryTeacherId, setPrimaryTeacherId] = useState(teacherList[0]?.id || '');
 
   const handleCreateSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -24,7 +27,7 @@ export const ClassManagement: React.FC = () => {
       section,
       roomNumber,
       capacity: Number(capacity) || 30,
-      primaryTeacherId: primaryTeacherId || teachers[0]?.id || '',
+      primaryTeacherId: primaryTeacherId || teacherList[0]?.id || '',
       subjects: ['Mathematics', 'Physics', 'Computing'],
     });
     setName('');
@@ -49,10 +52,11 @@ export const ClassManagement: React.FC = () => {
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {activeTenant.classes.map((cls) => {
-          const teacher = activeTenant.users.find((u) => u.id === cls.primaryTeacherId);
+        {classes.map((cls: SchoolClass, idx: number) => {
+          const clsKey = cls.id || (cls as any)._id || cls.name || `cls-${idx}`;
+          const teacher = users.find((u: TenantUser) => (u.id || (u as any)._id) === cls.primaryTeacherId);
           return (
-            <div key={cls.id} className="p-6 rounded-2xl bg-white/[0.03] border border-white/10 flex flex-col justify-between">
+            <div key={clsKey} className="p-6 rounded-2xl bg-white/[0.03] border border-white/10 flex flex-col justify-between">
               <div>
                 <div className="text-xs text-purple-300 font-medium">
                   {cls.gradeLevel} &middot; {cls.roomNumber}
@@ -60,13 +64,13 @@ export const ClassManagement: React.FC = () => {
                 <h2 className="text-lg font-bold text-white mt-1">{cls.name}</h2>
                 <div className="text-xs text-slate-400 mt-2">Primary Faculty: {teacher?.fullName || 'Unassigned'}</div>
                 <div className="text-xs font-mono text-slate-300 mt-3 pt-3 border-t border-white/10">
-                  Enrollment: {cls.studentIds.length} / {cls.capacity} Students
+                  Enrollment: {cls.studentIds?.length || 0} / {cls.capacity} Students
                 </div>
               </div>
               {currentUser.role === 'admin' && (
                 <div className="pt-4 mt-4 border-t border-white/10 flex justify-end">
                   <button
-                    onClick={() => deleteClass(cls.id)}
+                    onClick={() => deleteClass(clsKey)}
                     className="text-xs text-slate-400 hover:text-red-400 cursor-pointer"
                   >
                     Delete Class
@@ -92,10 +96,11 @@ export const ClassManagement: React.FC = () => {
               </tr>
             </thead>
             <tbody className="divide-y divide-white/10">
-              {students.map((stu) => {
-                const assignedCls = activeTenant.classes.find((c) => c.id === stu.assignedClassId);
+              {studentList.map((stu: TenantUser, idx: number) => {
+                const stuKey = stu.id || (stu as any)._id || stu.username || `stu-${idx}`;
+                const assignedCls = classes.find((c: SchoolClass) => (c.id || (c as any)._id) === stu.assignedClassId);
                 return (
-                  <tr key={stu.id}>
+                  <tr key={stuKey}>
                     <td className="py-3 pr-4 text-white font-medium">{stu.fullName}</td>
                     <td className="py-3 px-4 font-mono text-purple-300">{stu.rollNumber || 'N/A'}</td>
                     <td className="py-3 px-4 text-slate-300">{assignedCls?.name || 'Unassigned'}</td>
@@ -103,15 +108,18 @@ export const ClassManagement: React.FC = () => {
                       {currentUser.role === 'admin' ? (
                         <select
                           value={stu.assignedClassId || ''}
-                          onChange={(e) => allotStudentToClass(stu.id, e.target.value)}
+                          onChange={(e) => allotStudent(e.target.value, stuKey)}
                           className="px-2.5 py-1 text-xs bg-black/50 border border-white/15 rounded-lg text-white"
                         >
                           <option value="">-- Unassigned --</option>
-                          {activeTenant.classes.map((c) => (
-                            <option key={c.id} value={c.id}>
-                              {c.name}
-                            </option>
-                          ))}
+                          {classes.map((c: SchoolClass, cIdx: number) => {
+                            const cKey = c.id || (c as any)._id || c.name || `opt-cls-${cIdx}`;
+                            return (
+                              <option key={cKey} value={cKey}>
+                                {c.name}
+                              </option>
+                            );
+                          })}
                         </select>
                       ) : (
                         <span className="text-slate-400">{assignedCls?.roomNumber || '-'}</span>
@@ -156,6 +164,17 @@ export const ClassManagement: React.FC = () => {
                   />
                 </div>
                 <div>
+                  <label className="block text-xs text-slate-300 mb-1">Section</label>
+                  <input
+                    type="text"
+                    value={section}
+                    onChange={(e) => setSection(e.target.value)}
+                    className="w-full px-3 py-1.5 text-sm bg-black/40 border border-white/15 rounded-xl text-white"
+                  />
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
                   <label className="block text-xs text-slate-300 mb-1">Room Number</label>
                   <input
                     type="text"
@@ -164,13 +183,36 @@ export const ClassManagement: React.FC = () => {
                     className="w-full px-3 py-1.5 text-sm bg-black/40 border border-white/15 rounded-xl text-white"
                   />
                 </div>
+                <div>
+                  <label className="block text-xs text-slate-300 mb-1">Capacity</label>
+                  <input
+                    type="number"
+                    value={capacity}
+                    onChange={(e) => setCapacity(Number(e.target.value))}
+                    className="w-full px-3 py-1.5 text-sm bg-black/40 border border-white/15 rounded-xl text-white font-mono"
+                  />
+                </div>
+              </div>
+              <div>
+                <label className="block text-xs text-slate-300 mb-1">Primary Teacher</label>
+                <select
+                  value={primaryTeacherId}
+                  onChange={(e) => setPrimaryTeacherId(e.target.value)}
+                  className="w-full px-3 py-1.5 text-sm bg-black/40 border border-white/15 rounded-xl text-white"
+                >
+                  {teacherList.map((t: TenantUser) => (
+                    <option key={t.id} value={t.id}>
+                      {t.fullName}
+                    </option>
+                  ))}
+                </select>
               </div>
               <div className="flex justify-end gap-3 pt-2">
                 <button type="button" onClick={() => setShowCreateModal(false)} className="px-3 py-1.5 text-xs text-slate-300">
                   Cancel
                 </button>
                 <button type="submit" className="px-4 py-2 text-xs font-semibold text-white bg-purple-600 rounded-xl">
-                  Save Class
+                  Create Class
                 </button>
               </div>
             </form>

@@ -1,9 +1,10 @@
 import React, { useState } from 'react';
 import { Database, Plus, Trash2, ShieldAlert } from 'lucide-react';
 import { useApp } from '../context/AppContext';
+import { InstitutionRegistry, AuditLogEntry } from '../types/crm';
 
 export const TenantDatabaseConsole: React.FC = () => {
-  const { state, activeTenant, registerInstitution, deleteTenantDatabase, switchPersona } = useApp();
+  const { institutions, activeTenant, deleteTenant } = useApp();
 
   return (
     <div className="space-y-6">
@@ -13,9 +14,8 @@ export const TenantDatabaseConsole: React.FC = () => {
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        {state.masterDb.institutions.map((inst) => {
-          const isCurrent = activeTenant.databaseName === inst.databaseName;
-          const tenant = state.tenants[inst.databaseName];
+        {institutions.map((inst: InstitutionRegistry) => {
+          const isCurrent = activeTenant?.databaseName === inst.databaseName;
           return (
             <div key={inst.id} className="p-6 rounded-2xl bg-white/[0.03] border border-white/10 flex flex-col justify-between">
               <div>
@@ -23,20 +23,17 @@ export const TenantDatabaseConsole: React.FC = () => {
                 <h2 className="text-lg font-bold text-white mt-1">{inst.institutionName}</h2>
                 <div className="text-xs text-slate-400 mt-1">Admin: {inst.adminName} (@{inst.adminUsername})</div>
                 <div className="mt-4 pt-3 border-t border-white/10 text-xs font-mono text-slate-300">
-                  {tenant?.users.length || 0} Users &middot; {tenant?.classes.length || 0} Classes
+                  Status: {inst.status} &middot; Created: {new Date(inst.createdAt).toLocaleDateString()}
                 </div>
               </div>
               <div className="flex justify-between items-center mt-6 pt-3 border-t border-white/10">
-                <button
-                  onClick={() => tenant && switchPersona(tenant.databaseName, tenant.users[0]?.id)}
-                  className="px-3 py-1.5 text-xs bg-purple-600 rounded-lg text-white"
-                >
-                  {isCurrent ? 'Active DB' : 'Connect DB'}
-                </button>
-                {state.masterDb.institutions.length > 1 && (
+                <span className={`px-3 py-1 text-xs rounded-lg ${isCurrent ? 'bg-purple-600 text-white' : 'bg-white/10 text-slate-300'}`}>
+                  {isCurrent ? 'Active DB' : 'Connected Registry'}
+                </span>
+                {institutions.length > 1 && (
                   <button
-                    onClick={() => deleteTenantDatabase(inst.databaseName)}
-                    className="text-xs text-red-400 hover:text-red-300"
+                    onClick={() => deleteTenant(inst.databaseName)}
+                    className="text-xs text-red-400 hover:text-red-300 cursor-pointer"
                   >
                     Delete DB
                   </button>
@@ -51,30 +48,14 @@ export const TenantDatabaseConsole: React.FC = () => {
 };
 
 export const AuditLogConsole: React.FC = () => {
-  const { state, activeTenant } = useApp();
-  const [scope, setScope] = useState<'tenant' | 'master'>('tenant');
-  const logs = scope === 'tenant' ? activeTenant.activityLogs : state.masterDb.masterLogs;
+  const { auditLogs } = useApp();
 
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-center">
         <div>
           <h1 className="text-2xl font-bold text-white font-display">Activity &amp; Audit Logs</h1>
-          <p className="text-xs text-slate-400 mt-1">Tracking IP address, User-Agent, and operations.</p>
-        </div>
-        <div className="flex gap-2">
-          <button
-            onClick={() => setScope('tenant')}
-            className={`px-3 py-1 text-xs rounded-lg ${scope === 'tenant' ? 'bg-purple-600 text-white' : 'bg-white/10 text-slate-300'}`}
-          >
-            Tenant Logs
-          </button>
-          <button
-            onClick={() => setScope('master')}
-            className={`px-3 py-1 text-xs rounded-lg ${scope === 'master' ? 'bg-purple-600 text-white' : 'bg-white/10 text-slate-300'}`}
-          >
-            Master Logs
-          </button>
+          <p className="text-xs text-slate-400 mt-1">Tracking operations and system audit records.</p>
         </div>
       </div>
 
@@ -89,14 +70,17 @@ export const AuditLogConsole: React.FC = () => {
             </tr>
           </thead>
           <tbody className="divide-y divide-white/10">
-            {logs.map((log) => (
-              <tr key={log.id}>
-                <td className="py-3 pr-4 font-mono text-slate-300">{new Date(log.timestamp).toLocaleTimeString()}</td>
-                <td className="py-3 px-4 font-medium text-white">{log.actorName}</td>
-                <td className="py-3 px-4 text-slate-200">[{log.actionCategory}] {log.description}</td>
-                <td className="py-3 pl-4 text-right font-mono text-slate-400">{log.ipAddress}</td>
-              </tr>
-            ))}
+            {auditLogs.map((log: AuditLogEntry, idx: number) => {
+              const logKey = log.id || (log as any)._id || `log-${idx}`;
+              return (
+                <tr key={logKey}>
+                  <td className="py-3 pr-4 font-mono text-slate-300">{new Date(log.timestamp).toLocaleTimeString()}</td>
+                  <td className="py-3 px-4 font-medium text-white">{log.actorName}</td>
+                  <td className="py-3 px-4 text-slate-200">[{log.actionCategory}] {log.description}</td>
+                  <td className="py-3 pl-4 text-right font-mono text-slate-400">{log.ipAddress}</td>
+                </tr>
+              );
+            })}
           </tbody>
         </table>
       </div>

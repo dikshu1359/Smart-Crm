@@ -10,6 +10,7 @@ import { TeacherAssignments } from './components/TeacherAssignments';
 import { StudentAssignments } from './components/StudentAssignments';
 import { QuizManagement } from './components/QuizManagement';
 import { ScheduleManagement } from './components/ScheduleManagement';
+import { AcademicCalendar } from './components/AcademicCalendar';
 import { PerformanceAnalytics } from './components/PerformanceAnalytics';
 import { NoticeCommunication } from './components/NoticeCommunication';
 import { ChatCommunication } from './components/ChatCommunication';
@@ -55,8 +56,8 @@ const CRMWorkspaceShell: React.FC = () => {
 
         <main className="flex-1 p-6 lg:p-8 max-w-[1360px] w-full mx-auto">
           {activeTab === 'overview' && <DashboardOverview />}
-          {activeTab === 'users' && <UserManagement />}
-          {activeTab === 'classes' && <ClassManagement />}
+          {activeTab === 'users' && (currentUser.role === 'admin' ? <UserManagement /> : <DashboardOverview />)}
+          {activeTab === 'classes' && (currentUser.role !== 'student' ? <ClassManagement /> : <DashboardOverview />)}
           {activeTab === 'assignments' &&
             (currentUser.role === 'student' ? (
               <StudentAssignments />
@@ -65,11 +66,12 @@ const CRMWorkspaceShell: React.FC = () => {
             ))}
           {activeTab === 'quizzes' && <QuizManagement />}
           {activeTab === 'schedule' && <ScheduleManagement />}
+          {activeTab === 'calendar' && <AcademicCalendar />}
           {activeTab === 'analytics' && <PerformanceAnalytics />}
           {activeTab === 'notices' && <NoticeCommunication />}
           {activeTab === 'chat' && <ChatCommunication />}
-          {activeTab === 'tenants' && <TenantDatabaseConsole />}
-          {activeTab === 'audit' && <AuditLogConsole />}
+          {activeTab === 'tenants' && (currentUser.role === 'admin' ? <TenantDatabaseConsole /> : <DashboardOverview />)}
+          {activeTab === 'audit' && (currentUser.role === 'admin' ? <AuditLogConsole /> : <DashboardOverview />)}
           {activeTab === 'profile' && <ProfileView />}
         </main>
       </div>

@@ -346,6 +346,83 @@ export const api = {
     });
     return res.json();
   },
+
+  // Academic Calendar
+  async getCalendarEvents(
+    databaseName: string,
+    filter?: { category?: string; month?: string; classId?: string }
+  ) {
+    const params = new URLSearchParams();
+    if (filter?.category) params.append('category', filter.category);
+    if (filter?.month) params.append('month', filter.month);
+    if (filter?.classId) params.append('classId', filter.classId);
+
+    const res = await fetch(`${BASE_URL}/calendar?${params.toString()}`, {
+      headers: getAuthHeaders(databaseName),
+    });
+    return res.json();
+  },
+
+  async createCalendarEvent(databaseName: string, payload: any) {
+    const res = await fetch(`${BASE_URL}/calendar`, {
+      method: 'POST',
+      headers: getAuthHeaders(databaseName),
+      body: JSON.stringify(payload),
+    });
+    return res.json();
+  },
+
+  async updateCalendarEvent(databaseName: string, eventId: string, payload: any) {
+    const res = await fetch(`${BASE_URL}/calendar/${eventId}`, {
+      method: 'PUT',
+      headers: getAuthHeaders(databaseName),
+      body: JSON.stringify(payload),
+    });
+    return res.json();
+  },
+
+  async deleteCalendarEvent(databaseName: string, eventId: string) {
+    const res = await fetch(`${BASE_URL}/calendar/${eventId}`, {
+      method: 'DELETE',
+      headers: getAuthHeaders(databaseName),
+    });
+    return res.json();
+  },
+
+  // Attendance
+  async getAttendance(
+    databaseName: string,
+    filter?: { classId?: string; date?: string; month?: string }
+  ) {
+    const params = new URLSearchParams();
+    if (filter?.classId) params.append('classId', filter.classId);
+    if (filter?.date) params.append('date', filter.date);
+    if (filter?.month) params.append('month', filter.month);
+
+    const res = await fetch(`${BASE_URL}/attendance?${params.toString()}`, {
+      headers: getAuthHeaders(databaseName),
+    });
+    return res.json();
+  },
+
+  async getAttendanceSummary(databaseName: string) {
+    const res = await fetch(`${BASE_URL}/attendance/summary`, {
+      headers: getAuthHeaders(databaseName),
+    });
+    return res.json();
+  },
+
+  async markAttendance(
+    databaseName: string,
+    payload: { classId: string; date: string; records: any[] }
+  ) {
+    const res = await fetch(`${BASE_URL}/attendance`, {
+      method: 'POST',
+      headers: getAuthHeaders(databaseName),
+      body: JSON.stringify(payload),
+    });
+    return res.json();
+  },
 };
 
 export default api;

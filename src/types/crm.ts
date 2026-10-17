@@ -219,6 +219,47 @@ export interface NoticeItem {
   readByUserIds: string[];
 }
 
+export type CalendarEventCategory = 'academic' | 'holiday' | 'special';
+
+export interface CalendarEvent {
+  id: string;
+  _id?: string;
+  title: string;
+  category: CalendarEventCategory;
+  description: string;
+  date: string; // YYYY-MM-DD
+  startTime: string; // HH:mm
+  endTime: string; // HH:mm
+  targetScope: 'all' | 'class';
+  targetClassIds: string[];
+  authorName: string;
+  authorRole: string;
+  createdAt?: string;
+}
+
+export interface AttendanceRecordItem {
+  studentId: string;
+  studentName: string;
+  rollNumber: string;
+  status: 'present' | 'absent';
+  remarks?: string;
+}
+
+export interface AttendanceSession {
+  id: string;
+  _id?: string;
+  classId: string;
+  className?: string;
+  date: string;
+  markedByTeacherId?: string;
+  markedByTeacherName?: string;
+  records: AttendanceRecordItem[];
+  totalStudents: number;
+  presentCount: number;
+  absentCount: number;
+  createdAt?: string;
+}
+
 export type DashboardTab =
   | 'overview'
   | 'users'
@@ -226,9 +267,11 @@ export type DashboardTab =
   | 'assignments'
   | 'quizzes'
   | 'schedule'
+  | 'calendar'
   | 'analytics'
   | 'notices'
   | 'chat'
   | 'tenants'
   | 'audit'
   | 'profile';
+

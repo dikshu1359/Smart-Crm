@@ -2,29 +2,30 @@ import React, { useState } from 'react';
 import { CalendarClock, Plus, Coffee, X } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { DAYS_OF_WEEK, TIME_SLOTS } from '../data/seedMultiTenant';
-import { DayOfWeek, TimeSlotInterval } from '../types/crm';
+import { DayOfWeek, TimeSlotInterval, TenantUser, SchoolClass, ScheduleSlot } from '../types/crm';
 
 export const ScheduleManagement: React.FC = () => {
-  const { activeTenant, currentUser, addScheduleSlot, deleteScheduleSlot } = useApp();
+  const { activeTenant, currentUser, classes, users, schedules, addScheduleSlot } = useApp();
+  if (!activeTenant || !currentUser) return null;
   const [selectedClassId, setSelectedClassId] = useState(
     currentUser.role === 'student' && currentUser.assignedClassId
       ? currentUser.assignedClassId
-      : activeTenant.classes[0]?.id || ''
+      : classes[0]?.id || ''
   );
 
   const [showAddModal, setShowAddModal] = useState(false);
   const [day, setDay] = useState<DayOfWeek>('Monday');
   const [timeSlot, setTimeSlot] = useState<TimeSlotInterval>('09:00 - 10:00');
   const [subject, setSubject] = useState('Calculus');
-  const [teacherId, setTeacherId] = useState(activeTenant.users.find((u) => u.role === 'teacher')?.id || '');
+  const [teacherId, setTeacherId] = useState(users.find((u: TenantUser) => u.role === 'teacher')?.id || '');
   const [roomNumber, setRoomNumber] = useState('Lab 304');
   const [errorMsg, setErrorMsg] = useState('');
 
-  const teachers = activeTenant.users.filter((u) => u.role === 'teacher');
+  const teachers = users.filter((u: TenantUser) => u.role === 'teacher');
 
-  const handleCreateSlot = (e: React.FormEvent) => {
+  const handleCreateSlot = async (e: React.FormEvent) => {
     e.preventDefault();
-    const res = addScheduleSlot({
+    const res = await addScheduleSlot({
       day,
       timeSlot,
       classId: selectedClassId,
@@ -33,7 +34,7 @@ export const ScheduleManagement: React.FC = () => {
       roomNumber,
     });
     if (!res.ok) {
-      setErrorMsg(res.error || 'Conflict detected.');
+      setErrorMsg(res.message || 'Conflict detected.');
     } else {
       setShowAddModal(false);
       setErrorMsg('');
@@ -53,11 +54,14 @@ export const ScheduleManagement: React.FC = () => {
             onChange={(e) => setSelectedClassId(e.target.value)}
             className="px-3 py-1.5 text-xs bg-black/40 border border-white/15 rounded-xl text-white"
           >
-            {activeTenant.classes.map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.name}
-              </option>
-            ))}
+            {classes.map((c: SchoolClass, cIdx: number) => {
+              const cKey = c.id || (c as any)._id || `class-opt-${cIdx}`;
+              return (
+                <option key={cKey} value={cKey}>
+                  {c.name}
+                </option>
+              );
+            })}
           </select>
           {currentUser.role === 'admin' && (
             <button
@@ -78,7 +82,7 @@ export const ScheduleManagement: React.FC = () => {
           <thead>
             <tr className="border-b border-white/10 text-slate-400">
               <th className="py-2.5 pr-4 w-32 font-mono">Time Interval</th>
-              {DAYS_OF_WEEK.map((d) => (
+              {DAYS_OF_WEEK.map((d: string) => (
                 <th key={d} className="py-2.5 px-3 font-semibold text-white">
                   {d}
                 </th>
@@ -101,11 +105,11 @@ export const ScheduleManagement: React.FC = () => {
               return (
                 <tr key={slotTime}>
                   <td className="py-3 pr-4 font-mono text-slate-300">{slotTime}</td>
-                  {DAYS_OF_WEEK.map((d) => {
-                    const slot = activeTenant.schedules.find(
-                      (s) => s.day === d && s.timeSlot === slotTime && s.classId === selectedClassId
+                  {DAYS_OF_WEEK.map((d: string) => {
+                    const slot = schedules.find(
+                      (s: ScheduleSlot) => s.day === d && s.timeSlot === slotTime && s.classId === selectedClassId
                     );
-                    const teacher = slot ? activeTenant.users.find((u) => u.id === slot.teacherId) : null;
+                    const teacher = slot ? users.find((u: TenantUser) => u.id === slot.teacherId) : null;
                     return (
                       <td key={d} className="py-2.5 px-2.5">
                         {slot ? (
@@ -176,11 +180,14 @@ export const ScheduleManagement: React.FC = () => {
                   onChange={(e) => setTeacherId(e.target.value)}
                   className="w-full px-3 py-1.5 text-sm bg-black/40 border border-white/15 rounded-xl text-white"
                 >
-                  {teachers.map((t) => (
-                    <option key={t.id} value={t.id}>
-                      {t.fullName}
-                    </option>
-                  ))}
+                  {teachers.map((t, tIdx) => {
+                    const tKey = t.id || (t as any)._id || t.username || `teacher-opt-${tIdx}`;
+                    return (
+                      <option key={tKey} value={tKey}>
+                        {t.fullName}
+                      </option>
+                    );
+                  })}
                 </select>
               </div>
               <div className="grid grid-cols-2 gap-3">

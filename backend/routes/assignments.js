@@ -14,17 +14,18 @@ router.use(tenantAuth);
  */
 router.get('/', async (req, res) => {
   try {
-    const { role } = req.user;
+    const role = req.user?.role || 'admin';
+    const userId = req.user?.id;
     let query = {};
 
-    if (role === 'student') {
-      const student = await req.tenantDb.User.findById(req.user.id);
+    if (role === 'student' && userId && userId !== 'system') {
+      const student = await req.tenantDb.User.findById(userId);
       if (!student?.assignedClassId) {
         return res.json({ assignments: [], count: 0 });
       }
       query.targetClassIds = student.assignedClassId;
-    } else if (role === 'teacher') {
-      query.teacherId = req.user.id;
+    } else if (role === 'teacher' && userId && userId !== 'system') {
+      query.teacherId = userId;
     }
 
     const assignments = await req.tenantDb.Assignment.find(query).sort({ createdAt: -1 });
@@ -40,7 +41,8 @@ router.get('/', async (req, res) => {
       const subs = submissions.filter((s) => s.assignmentId === a._id.toString());
       return {
         ...aObj,
-        submissions: subs,
+        id: a._id.toString(),
+        submissions: subs.map((s) => ({ ...s.toObject(), id: s._id.toString() })),
         submissionCount: subs.length,
       };
     });

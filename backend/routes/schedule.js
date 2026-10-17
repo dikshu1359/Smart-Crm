@@ -18,17 +18,21 @@ router.get('/', async (req, res) => {
       query.classId = classId;
     } else if (teacherId) {
       query.teacherId = teacherId;
-    } else if (req.user.role === 'student') {
+    } else if (req.user?.role === 'student' && req.user?.id && req.user.id !== 'system') {
       const student = await req.tenantDb.User.findById(req.user.id);
       if (student?.assignedClassId) {
         query.classId = student.assignedClassId;
       }
-    } else if (req.user.role === 'teacher') {
+    } else if (req.user?.role === 'teacher' && req.user?.id && req.user.id !== 'system') {
       query.teacherId = req.user.id;
     }
 
     const schedules = await req.tenantDb.Schedule.find(query);
-    res.json({ schedules, count: schedules.length });
+    const formatted = schedules.map((s) => ({
+      ...s.toObject(),
+      id: s._id.toString(),
+    }));
+    res.json({ schedules: formatted, count: formatted.length });
   } catch (err) {
     res.status(500).json({ error: 'FetchScheduleError', message: err.message });
   }

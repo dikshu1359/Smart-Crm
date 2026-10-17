@@ -4,6 +4,7 @@ import { UserCircle } from 'lucide-react';
 
 export const ProfileView: React.FC = () => {
   const { activeTenant, currentUser } = useApp();
+  if (!activeTenant || !currentUser) return null;
 
   return (
     <div className="max-w-2xl space-y-6">

@@ -1,23 +1,22 @@
 import React, { useState } from 'react';
 import { useApp } from '../context/AppContext';
-import { Assignment } from '../types/crm';
+import { Assignment, StudentSubmission } from '../types/crm';
 import { Award, CheckCircle2, RotateCcw, AlertTriangle, X } from 'lucide-react';
 
 export const StudentAssignments: React.FC = () => {
-  const { activeTenant, currentUser, submitAssignment } = useApp();
+  const { activeTenant, currentUser, assignments, submitAssignment } = useApp();
+  if (!activeTenant || !currentUser) return null;
   const [activeUploadAsgn, setActiveUploadAsgn] = useState<Assignment | null>(null);
   const [notes, setNotes] = useState('');
 
-  const cohortAssignments = activeTenant.assignments.filter((a) =>
+  const cohortAssignments = assignments.filter((a: Assignment) =>
     currentUser.assignedClassId ? a.targetClassIds.includes(currentUser.assignedClassId) : true
   );
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!activeUploadAsgn) return;
-    submitAssignment({
-      assignmentId: activeUploadAsgn.id,
-      studentId: currentUser.id,
+    submitAssignment(activeUploadAsgn.id, {
       studentNotes: notes || 'Completed and submitted.',
       attachments: [
         {
@@ -42,13 +41,14 @@ export const StudentAssignments: React.FC = () => {
       </div>
 
       <div className="space-y-4">
-        {cohortAssignments.map((asgn) => {
-          const mySub = asgn.submissions.find((s) => s.studentId === currentUser.id);
+        {cohortAssignments.map((asgn, idx) => {
+          const asgnKey = asgn.id || (asgn as any)._id || asgn.title || `asgn-${idx}`;
+          const mySub = asgn.submissions?.find((s: StudentSubmission) => s.studentId === currentUser.id);
           const status = mySub?.status || 'pending';
           const isOverdue = status === 'pending' && new Date(asgn.dueDate) < new Date();
 
           return (
-            <div key={asgn.id} className="p-5 rounded-2xl bg-white/[0.03] border border-white/10 flex justify-between items-start gap-4">
+            <div key={asgnKey} className="p-5 rounded-2xl bg-white/[0.03] border border-white/10 flex justify-between items-start gap-4">
               <div className="space-y-2 flex-1">
                 <div className="text-xs text-purple-300 font-medium">
                   {asgn.subject} &middot; Due: {new Date(asgn.dueDate).toLocaleDateString()}

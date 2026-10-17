@@ -19,7 +19,7 @@ interface RoleSelectionProps {
 }
 
 export const RoleSelectionPage: React.FC<RoleSelectionProps> = ({ initialRole }) => {
-  const { login, registerInstitution, setCurrentView, institutions } = useApp();
+  const { login, registerInstitution, logout, setCurrentView, institutions } = useApp();
 
   const [role, setRole] = useState<UserRole | null>(initialRole || null);
   const [adminMode, setAdminMode] = useState<'login' | 'register'>('login');
@@ -55,7 +55,21 @@ export const RoleSelectionPage: React.FC<RoleSelectionProps> = ({ initialRole })
     setLoginLoading(false);
 
     if (!res.ok) {
-      setLoginError(res.message);
+      setLoginError(res.message || 'Invalid credentials. Please verify your username/email and password.');
+      return;
+    }
+
+    // Role portal validation: ensure credentials match the role portal selected
+    if (role && res.user && res.user.role !== role) {
+      logout();
+      const correctPortal =
+        res.user.role === 'admin'
+          ? 'Administrator Portal'
+          : res.user.role === 'teacher'
+          ? 'Teacher / Faculty Portal'
+          : 'Student Portal';
+      setLoginError(`Access Denied: This account is registered with the role "${res.user.role}". Please switch to the ${correctPortal} to sign in.`);
+      return;
     }
   };
 

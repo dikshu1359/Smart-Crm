@@ -16,6 +16,7 @@ import {
   Menu,
   X,
   Building2,
+  Calendar as CalendarIcon,
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { DashboardTab, UserRole } from '../types/crm';
@@ -85,6 +86,12 @@ export const Navigation: React.FC<NavigationProps> = ({ mobileOpen, setMobileOpe
       id: 'schedule',
       label: 'Smart Timetable',
       icon: CalendarClock,
+      roles: ['admin', 'teacher', 'student'],
+    },
+    {
+      id: 'calendar',
+      label: 'Academic Calendar',
+      icon: CalendarIcon,
       roles: ['admin', 'teacher', 'student'],
     },
     {

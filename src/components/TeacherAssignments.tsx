@@ -4,17 +4,18 @@ import { useApp } from '../context/AppContext';
 import { Assignment, FileAttachment, StudentSubmission, SubmissionStatus } from '../types/crm';
 
 export const TeacherAssignments: React.FC = () => {
-  const { activeTenant, currentUser, createAssignment, reviewSubmission } = useApp();
+  const { activeTenant, currentUser, assignments, classes, createAssignment, reviewSubmission } = useApp();
+  if (!activeTenant || !currentUser) return null;
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [selectedAssignmentId, setSelectedAssignmentId] = useState<string>(
-    activeTenant.assignments[0]?.id || ''
+    assignments[0]?.id || ''
   );
 
   const [title, setTitle] = useState('');
   const [subject, setSubject] = useState('');
   const [description, setDescription] = useState('');
   const [targetClassIds, setTargetClassIds] = useState<string[]>(
-    activeTenant.classes[0] ? [activeTenant.classes[0].id] : []
+    classes[0] ? [classes[0].id] : []
   );
   const [dueDate, setDueDate] = useState('2026-10-30');
   const [maxMarks, setMaxMarks] = useState(100);
@@ -27,8 +28,8 @@ export const TeacherAssignments: React.FC = () => {
   const [marksInput, setMarksInput] = useState<number>(90);
 
   const selectedAssignment =
-    activeTenant.assignments.find((a) => a.id === selectedAssignmentId) ||
-    activeTenant.assignments[0];
+    assignments.find((a: Assignment) => a.id === selectedAssignmentId) ||
+    assignments[0];
 
   const handleCreateSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -49,13 +50,22 @@ export const TeacherAssignments: React.FC = () => {
 
   const handleApplyReview = (status: SubmissionStatus) => {
     if (!reviewingTarget) return;
-    reviewSubmission({
-      assignmentId: reviewingTarget.assignment.id,
-      studentId: reviewingTarget.submission.studentId,
-      status,
-      teacherReviewNotes: reviewNotes || (status === 'graded' ? 'Graded and approved.' : status),
-      marksObtained: status === 'graded' ? Number(marksInput) : undefined,
-    });
+    const actionMap: Record<SubmissionStatus, 'accept' | 'reject' | 'reassign' | 'grade'> = {
+      accepted: 'accept',
+      rejected: 'reject',
+      reassigned: 'reassign',
+      graded: 'grade',
+      submitted: 'accept',
+      pending: 'accept',
+      under_review: 'accept',
+    };
+    reviewSubmission(
+      reviewingTarget.assignment.id,
+      reviewingTarget.submission.studentId,
+      actionMap[status] || 'grade',
+      status === 'graded' ? Number(marksInput) : undefined,
+      reviewNotes || (status === 'graded' ? 'Graded and approved.' : status)
+    );
     setReviewingTarget(null);
   };
 
@@ -76,21 +86,24 @@ export const TeacherAssignments: React.FC = () => {
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
         <div className="lg:col-span-4 space-y-3">
-          {activeTenant.assignments.map((asgn) => (
-            <button
-              key={asgn.id}
-              onClick={() => setSelectedAssignmentId(asgn.id)}
-              className={`w-full text-left p-4 rounded-xl border transition-all cursor-pointer ${
-                selectedAssignment?.id === asgn.id
-                  ? 'bg-purple-600/20 border-purple-400'
-                  : 'bg-white/[0.03] border-white/10 hover:border-white/20'
-              }`}
-            >
-              <div className="text-xs text-purple-300 font-medium">{asgn.subject}</div>
-              <div className="text-sm font-bold text-white mt-1">{asgn.title}</div>
-              <div className="text-xs text-slate-400 mt-1 font-mono">Max Marks: {asgn.maxMarks}</div>
-            </button>
-          ))}
+          {assignments.map((asgn: Assignment, idx: number) => {
+            const asgnKey = asgn.id || (asgn as any)._id || asgn.title || `asgn-${idx}`;
+            return (
+              <button
+                key={asgnKey}
+                onClick={() => setSelectedAssignmentId(asgnKey)}
+                className={`w-full text-left p-4 rounded-xl border transition-all cursor-pointer ${
+                  selectedAssignment?.id === asgnKey
+                    ? 'bg-purple-600/20 border-purple-400'
+                    : 'bg-white/[0.03] border-white/10 hover:border-white/20'
+                }`}
+              >
+                <div className="text-xs text-purple-300 font-medium">{asgn.subject}</div>
+                <div className="text-sm font-bold text-white mt-1">{asgn.title}</div>
+                <div className="text-xs text-slate-400 mt-1 font-mono">Max Marks: {asgn.maxMarks}</div>
+              </button>
+            );
+          })}
         </div>
 
         <div className="lg:col-span-8 p-6 rounded-2xl bg-white/[0.03] border border-white/10">
@@ -115,8 +128,10 @@ export const TeacherAssignments: React.FC = () => {
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-white/10">
-                      {selectedAssignment.submissions.map((sub) => (
-                        <tr key={sub.studentId}>
+                      {selectedAssignment.submissions?.map((sub: StudentSubmission, sIdx: number) => {
+                        const subKey = sub.id || (sub as any)._id || sub.studentId || `sub-${sIdx}`;
+                        return (
+                          <tr key={subKey}>
                           <td className="py-3 pr-4 text-white font-medium">{sub.studentName}</td>
                           <td className="py-3 px-4 capitalize text-purple-300">{sub.status}</td>
                           <td className="py-3 px-4 text-right font-mono text-emerald-400">
@@ -135,7 +150,8 @@ export const TeacherAssignments: React.FC = () => {
                             </button>
                           </td>
                         </tr>
-                      ))}
+                      );
+                    })}
                     </tbody>
                   </table>
                 </div>

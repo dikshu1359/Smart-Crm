@@ -12,6 +12,8 @@ import {
   ChatContact,
   AuditLogEntry,
   InstitutionRegistry,
+  CalendarEvent,
+  AttendanceSession,
 } from '../types/crm';
 import api from '../services/api';
 
@@ -43,12 +45,19 @@ interface AppContextValue {
   chatContacts: ChatContact[];
   auditLogs: AuditLogEntry[];
   analytics: any;
+  calendarEvents: CalendarEvent[];
+  attendanceSessions: AttendanceSession[];
+  attendanceSummary: any;
 
   // Actions
   setCurrentView: (view: AppView) => void;
   setSelectedRole: (role: UserRole | null) => void;
   setActiveTab: (tab: DashboardTab) => void;
-  login: (username: string, password: string, databaseName?: string) => Promise<{ ok: boolean; message: string }>;
+  login: (
+    username: string,
+    password: string,
+    databaseName?: string
+  ) => Promise<{ ok: boolean; message: string; user?: any }>;
   registerInstitution: (payload: {
     institutionName: string;
     adminUsername: string;
@@ -56,12 +65,14 @@ interface AppContextValue {
     adminEmail: string;
     password: string;
     campusCode?: string;
-  }) => Promise<{ ok: boolean; message: string }>;
+  }) => Promise<{ ok: boolean; message: string; user?: any }>;
   logout: () => void;
   refreshData: () => Promise<void>;
 
   // Domain Actions
-  createUser: (userPayload: any) => Promise<{ ok: boolean; message?: string }>;
+  createUser: (
+    userPayload: any
+  ) => Promise<{ ok: boolean; message?: string; initialPassword?: string; user?: any }>;
   updateUser: (userId: string, updates: any) => Promise<{ ok: boolean; message?: string }>;
   deleteUser: (userId: string) => Promise<{ ok: boolean; message?: string }>;
   createClass: (classPayload: any) => Promise<{ ok: boolean; message?: string }>;
@@ -82,6 +93,10 @@ interface AppContextValue {
   togglePublishQuiz: (quizId: string, isPublished: boolean) => Promise<{ ok: boolean; message?: string }>;
   addScheduleSlot: (slotPayload: any) => Promise<{ ok: boolean; message?: string }>;
   deleteScheduleSlot: (slotId: string) => Promise<{ ok: boolean; message?: string }>;
+  createCalendarEvent: (payload: any) => Promise<{ ok: boolean; message?: string; overlapWarning?: string | null }>;
+  updateCalendarEvent: (eventId: string, payload: any) => Promise<{ ok: boolean; message?: string }>;
+  deleteCalendarEvent: (eventId: string) => Promise<{ ok: boolean; message?: string }>;
+  markAttendance: (payload: { classId: string; date: string; records: any[] }) => Promise<{ ok: boolean; message?: string }>;
   createNotice: (payload: any) => Promise<{ ok: boolean; message?: string }>;
   markNoticeRead: (noticeId: string) => Promise<{ ok: boolean; message?: string }>;
   deleteNotice: (noticeId: string) => Promise<{ ok: boolean; message?: string }>;
@@ -118,6 +133,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [chatContacts, setChatContacts] = useState<ChatContact[]>([]);
   const [auditLogs, setAuditLogs] = useState<AuditLogEntry[]>([]);
   const [analytics, setAnalytics] = useState<any>(null);
+  const [calendarEvents, setCalendarEvents] = useState<CalendarEvent[]>([]);
+  const [attendanceSessions, setAttendanceSessions] = useState<AttendanceSession[]>([]);
+  const [attendanceSummary, setAttendanceSummary] = useState<any>(null);
 
   const setCurrentView = (view: AppView) => {
     // Protected routes check: Cannot open dashboard if unauthenticated
@@ -156,6 +174,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         contactsRes,
         auditRes,
         analyticsRes,
+        calendarRes,
+        attendanceSumRes,
+        attendanceLogsRes,
       ] = await Promise.all([
         api.getUsers(dbName),
         api.getClasses(dbName),
@@ -166,18 +187,48 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         api.getChatContacts(dbName),
         api.getAuditLogs(dbName, 'tenant'),
         api.getAnalytics(dbName),
+        api.getCalendarEvents(dbName),
+        api.getAttendanceSummary(dbName),
+        api.getAttendance(dbName),
       ]);
 
-      if (usersRes?.users) setUsers(usersRes.users);
-      if (classesRes?.classes) setClasses(classesRes.classes);
-      if (assignmentsRes?.assignments) setAssignments(assignmentsRes.assignments);
-      if (scheduleRes?.schedules) setSchedules(scheduleRes.schedules);
-      if (quizzesRes?.quizzes) setQuizzes(quizzesRes.quizzes);
-      if (quizzesRes?.attempts) setQuizAttempts(quizzesRes.attempts);
-      if (noticesRes?.notices) setNotices(noticesRes.notices);
-      if (contactsRes?.contacts) setChatContacts(contactsRes.contacts);
-      if (auditRes?.logs) setAuditLogs(auditRes.logs);
+      if (usersRes?.users) {
+        setUsers(usersRes.users.map((u: any) => ({ ...u, id: u.id || u._id?.toString() || u.username })));
+      }
+      if (classesRes?.classes) {
+        setClasses(classesRes.classes.map((c: any) => ({ ...c, id: c.id || c._id?.toString(), studentIds: c.studentIds || [] })));
+      }
+      if (assignmentsRes?.assignments) {
+        setAssignments(assignmentsRes.assignments.map((a: any) => ({ ...a, id: a.id || a._id?.toString() })));
+      }
+      if (scheduleRes?.schedules) {
+        setSchedules(scheduleRes.schedules.map((s: any) => ({ ...s, id: s.id || s._id?.toString() })));
+      }
+      if (quizzesRes?.quizzes) {
+        setQuizzes(quizzesRes.quizzes.map((q: any) => ({ ...q, id: q.id || q._id?.toString() })));
+      }
+      if (quizzesRes?.attempts) {
+        setQuizAttempts(quizzesRes.attempts.map((a: any) => ({ ...a, id: a.id || a._id?.toString() })));
+      }
+      if (noticesRes?.notices) {
+        setNotices(noticesRes.notices.map((n: any) => ({ ...n, id: n.id || n._id?.toString() })));
+      }
+      if (contactsRes?.contacts) {
+        setChatContacts(contactsRes.contacts.map((c: any) => ({ ...c, id: c.id || c._id?.toString() })));
+      }
+      if (auditRes?.logs) {
+        setAuditLogs(auditRes.logs.map((l: any) => ({ ...l, id: l.id || l._id?.toString() })));
+      }
       if (analyticsRes) setAnalytics(analyticsRes);
+      if (calendarRes?.events) {
+        setCalendarEvents(calendarRes.events.map((e: any) => ({ ...e, id: e.id || e._id?.toString() })));
+      }
+      if (attendanceSumRes) {
+        setAttendanceSummary(attendanceSumRes);
+      }
+      if (attendanceLogsRes?.attendance) {
+        setAttendanceSessions(attendanceLogsRes.attendance.map((s: any) => ({ ...s, id: s.id || s._id?.toString() })));
+      }
     } catch (err: any) {
       console.error('[AppContext] Failed to refresh tenant data:', err.message);
     }
@@ -192,8 +243,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       try {
         const session = await api.getCurrentUser();
         if (session?.user && session?.tenant) {
-          setCurrentUser(session.user);
+          const userWithId = {
+            ...session.user,
+            id: session.user.id || session.user._id?.toString(),
+          };
+          setCurrentUser(userWithId);
           setActiveTenant(session.tenant);
+          setSelectedRole(session.user.role);
           setIsAuthenticated(true);
           setViewInternal('dashboard');
         } else {
@@ -227,12 +283,18 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         return { ok: false, message: res.message || 'Authentication failed.' };
       }
 
-      setCurrentUser(res.user);
+      const userWithId = {
+        ...res.user,
+        id: res.user.id || res.user._id?.toString(),
+      };
+      setCurrentUser(userWithId);
       setActiveTenant(res.tenant);
+      setSelectedRole(res.user.role);
       setIsAuthenticated(true);
+      setActiveTab('overview');
       setViewInternal('dashboard');
       await fetchInstitutions();
-      return { ok: true, message: 'Logged in successfully.' };
+      return { ok: true, message: 'Logged in successfully.', user: userWithId };
     } catch (err: any) {
       return { ok: false, message: err.message || 'Login error occurred.' };
     }
@@ -254,12 +316,18 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         return { ok: false, message: res.message || 'Registration failed.' };
       }
 
-      setCurrentUser(res.user);
+      const userWithId = {
+        ...res.user,
+        id: res.user.id || res.user._id?.toString(),
+      };
+      setCurrentUser(userWithId);
       setActiveTenant(res.tenant);
+      setSelectedRole('admin');
       setIsAuthenticated(true);
+      setActiveTab('overview');
       setViewInternal('dashboard');
       await fetchInstitutions();
-      return { ok: true, message: res.message };
+      return { ok: true, message: res.message, user: userWithId };
     } catch (err: any) {
       return { ok: false, message: err.message || 'Registration error.' };
     }
@@ -272,6 +340,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setCurrentUser(null);
     setActiveTenant(null);
     setSelectedRole(null);
+    setActiveTab('overview');
     setViewInternal('landing');
   };
 
@@ -508,6 +577,54 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   };
 
+  const createCalendarEvent = async (payload: any) => {
+    if (!activeTenant) return { ok: false, message: 'No active institution.' };
+    try {
+      const res = await api.createCalendarEvent(activeTenant.databaseName, payload);
+      if (!res.success) return { ok: false, message: res.message || 'Failed to create calendar event.' };
+      await refreshData();
+      return { ok: true, overlapWarning: res.overlapWarning };
+    } catch (err: any) {
+      return { ok: false, message: err.message };
+    }
+  };
+
+  const updateCalendarEvent = async (eventId: string, payload: any) => {
+    if (!activeTenant) return { ok: false, message: 'No active institution.' };
+    try {
+      const res = await api.updateCalendarEvent(activeTenant.databaseName, eventId, payload);
+      if (!res.success) return { ok: false, message: res.message || 'Failed to update calendar event.' };
+      await refreshData();
+      return { ok: true };
+    } catch (err: any) {
+      return { ok: false, message: err.message };
+    }
+  };
+
+  const deleteCalendarEvent = async (eventId: string) => {
+    if (!activeTenant) return { ok: false, message: 'No active institution.' };
+    try {
+      const res = await api.deleteCalendarEvent(activeTenant.databaseName, eventId);
+      if (!res.success) return { ok: false, message: res.message || 'Failed to delete calendar event.' };
+      await refreshData();
+      return { ok: true };
+    } catch (err: any) {
+      return { ok: false, message: err.message };
+    }
+  };
+
+  const markAttendance = async (payload: { classId: string; date: string; records: any[] }) => {
+    if (!activeTenant) return { ok: false, message: 'No active institution.' };
+    try {
+      const res = await api.markAttendance(activeTenant.databaseName, payload);
+      if (!res.success) return { ok: false, message: res.message || 'Failed to record attendance.' };
+      await refreshData();
+      return { ok: true };
+    } catch (err: any) {
+      return { ok: false, message: err.message };
+    }
+  };
+
   const deleteTenant = async (databaseName: string) => {
     try {
       const res = await api.deleteTenant(databaseName);
@@ -542,6 +659,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         chatContacts,
         auditLogs,
         analytics,
+        calendarEvents,
+        attendanceSessions,
+        attendanceSummary,
         setCurrentView,
         setSelectedRole,
         setActiveTab,
@@ -564,6 +684,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         togglePublishQuiz,
         addScheduleSlot,
         deleteScheduleSlot,
+        createCalendarEvent,
+        updateCalendarEvent,
+        deleteCalendarEvent,
+        markAttendance,
         createNotice,
         markNoticeRead,
         deleteNotice,

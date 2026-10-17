@@ -54,7 +54,7 @@ export async function tenantAuth(req, res, next) {
       }
     }
 
-    // Direct tenant header (for unauthenticated or public registration routes if needed)
+    // Direct tenant header (for unauthenticated or public institutional routes if needed)
     if (headerDbName) {
       const tenantDb = await dbManager.getTenantDB(headerDbName);
       if (!tenantDb) {
@@ -65,6 +65,13 @@ export async function tenantAuth(req, res, next) {
       }
       req.tenantDb = tenantDb;
       req.databaseName = headerDbName;
+      req.user = {
+        role: 'admin',
+        id: 'system',
+        username: 'system',
+        fullName: 'Institutional System',
+        databaseName: headerDbName,
+      };
       return next();
     }
 
@@ -86,8 +93,8 @@ export async function tenantAuth(req, res, next) {
  */
 export function authorizeRoles(...allowedRoles) {
   return (req, res, next) => {
-    if (!req.user) {
-      return res.status(401).json({ error: 'Unauthorized', message: 'User not authenticated.' });
+    if (!req.user || req.user.id === 'system') {
+      return res.status(401).json({ error: 'Unauthorized', message: 'User authentication token required.' });
     }
     if (!allowedRoles.includes(req.user.role)) {
       return res.status(403).json({

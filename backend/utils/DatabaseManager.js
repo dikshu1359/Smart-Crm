@@ -226,6 +226,84 @@ const ActivityLogSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
+const CalendarEventSchema = new mongoose.Schema(
+  {
+    title: { type: String, required: true },
+    category: {
+      type: String,
+      enum: ['academic', 'holiday', 'special'],
+      required: true,
+    },
+    description: { type: String, default: '' },
+    date: { type: String, required: true }, // YYYY-MM-DD
+    startTime: { type: String, default: '09:00' },
+    endTime: { type: String, default: '17:00' },
+    targetScope: { type: String, enum: ['all', 'class'], default: 'all' },
+    targetClassIds: [{ type: String }],
+    authorName: { type: String, default: 'Administrator' },
+    authorRole: { type: String, default: 'admin' },
+  },
+  { timestamps: true }
+);
+
+const AttendanceSchema = new mongoose.Schema(
+  {
+    classId: { type: String, required: true, index: true },
+    date: { type: String, required: true, index: true }, // YYYY-MM-DD
+    markedByTeacherId: { type: String, default: '' },
+    markedByTeacherName: { type: String, default: '' },
+    records: [
+      {
+        studentId: { type: String, required: true },
+        studentName: { type: String, default: '' },
+        rollNumber: { type: String, default: '' },
+        status: { type: String, enum: ['present', 'absent'], required: true },
+        remarks: { type: String, default: '' },
+      },
+    ],
+    totalStudents: { type: Number, default: 0 },
+    presentCount: { type: Number, default: 0 },
+    absentCount: { type: Number, default: 0 },
+  },
+  { timestamps: true }
+);
+
+const MarksSchema = new mongoose.Schema(
+  {
+    classId: { type: String, required: true, index: true },
+    studentId: { type: String, required: true, index: true },
+    studentName: { type: String, default: '' },
+    rollNumber: { type: String, default: '' },
+    subject: { type: String, required: true },
+    assessmentTitle: { type: String, required: true },
+    assignmentMarks: { type: Number, default: 0 },
+    internalMarks: { type: Number, default: 0 },
+    examMarks: { type: Number, default: 0 },
+    otherMarks: { type: Number, default: 0 },
+    totalMarks: { type: Number, default: 0 },
+    maxMarks: { type: Number, default: 100 },
+    percentage: { type: Number, default: 0 },
+    grade: { type: String, default: 'A' },
+    teacherFeedback: { type: String, default: '' },
+    isPublished: { type: Boolean, default: true },
+    updatedByTeacherId: { type: String, default: '' },
+  },
+  { timestamps: true }
+);
+
+const StudentNoteSchema = new mongoose.Schema(
+  {
+    studentId: { type: String, required: true, index: true },
+    title: { type: String, required: true },
+    subject: { type: String, default: 'General' },
+    topic: { type: String, default: '' },
+    content: { type: String, required: true },
+    tags: [{ type: String }],
+    source: { type: String, enum: ['manual', 'ai_generated'], default: 'ai_generated' },
+  },
+  { timestamps: true }
+);
+
 class DatabaseManager {
   constructor() {
     this.connection = null;
@@ -292,6 +370,10 @@ class DatabaseManager {
       Notice: tenantConn.model('Notice', NoticeSchema),
       Message: tenantConn.model('Message', MessageSchema),
       ActivityLog: tenantConn.model('ActivityLog', ActivityLogSchema),
+      CalendarEvent: tenantConn.model('CalendarEvent', CalendarEventSchema),
+      Attendance: tenantConn.model('Attendance', AttendanceSchema),
+      Marks: tenantConn.model('Marks', MarksSchema),
+      StudentNote: tenantConn.model('StudentNote', StudentNoteSchema),
     };
 
     this.tenantModels.set(databaseName, models);
