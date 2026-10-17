@@ -8,29 +8,62 @@ export const StudentAssignments: React.FC = () => {
   if (!activeTenant || !currentUser) return null;
   const [activeUploadAsgn, setActiveUploadAsgn] = useState<Assignment | null>(null);
   const [notes, setNotes] = useState('');
+  const [selectedFile, setSelectedFile] = useState<{ name: string; size: string; dataUrl: string; mimeType: string } | null>(null);
 
-  const cohortAssignments = assignments.filter((a: Assignment) =>
-    currentUser.assignedClassId ? a.targetClassIds.includes(currentUser.assignedClassId) : true
-  );
+  const cohortAssignments = assignments.filter((a: Assignment) => {
+    const studentCls = currentUser.assignedClassId || (currentUser.assignedClassIds && currentUser.assignedClassIds[0]);
+    if (!studentCls) return true;
+    return a.targetClassIds && a.targetClassIds.some((id) => String(id) === String(studentCls));
+  });
+
+  const handleStudentFile = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      setSelectedFile({
+        name: file.name,
+        size: `${(file.size / 1024).toFixed(1)} KB`,
+        mimeType: file.type || 'application/pdf',
+        dataUrl: reader.result as string,
+      });
+    };
+    reader.readAsDataURL(file);
+  };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!activeUploadAsgn) return;
+    const attachments = selectedFile
+      ? [
+          {
+            id: `att-${Date.now()}`,
+            name: selectedFile.name,
+            size: selectedFile.size,
+            mimeType: selectedFile.mimeType,
+            uploadedAt: new Date().toISOString(),
+            contentPreview: `Solution uploaded by ${currentUser.fullName}`,
+            dataUrl: selectedFile.dataUrl,
+          },
+        ]
+      : [
+          {
+            id: `att-${Date.now()}`,
+            name: `${currentUser.username}_solution.pdf`,
+            size: '1.2 MB',
+            mimeType: 'application/pdf',
+            uploadedAt: new Date().toISOString(),
+            contentPreview: `Solution submitted by ${currentUser.fullName}`,
+          },
+        ];
+
     submitAssignment(activeUploadAsgn.id, {
       studentNotes: notes || 'Completed and submitted.',
-      attachments: [
-        {
-          id: `att-${Date.now()}`,
-          name: `${currentUser.username}_solution.pdf`,
-          size: '1.2 MB',
-          mimeType: 'application/pdf',
-          uploadedAt: new Date().toISOString(),
-          contentPreview: `Solution submitted by ${currentUser.fullName}`,
-        },
-      ],
+      attachments,
     });
     setActiveUploadAsgn(null);
     setNotes('');
+    setSelectedFile(null);
   };
 
   return (
@@ -112,8 +145,19 @@ export const StudentAssignments: React.FC = () => {
                   placeholder="Detail your solution work..."
                 />
               </div>
-              <div className="p-3 bg-purple-950/20 border border-purple-500/30 rounded-xl text-xs text-purple-200">
-                Attachment: {currentUser.username}_solution.pdf (Auto-Generated Worksheet PDF)
+              <div>
+                <label className="block text-xs text-slate-300 mb-1">Attach Solution File (PDF, Word, Code, Image)</label>
+                <input
+                  type="file"
+                  onChange={handleStudentFile}
+                  accept=".pdf,.doc,.docx,.txt,.zip,image/*"
+                  className="w-full text-xs text-slate-400 file:mr-2 file:py-1 file:px-2.5 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-purple-600/30 file:text-purple-200 hover:file:bg-purple-600/50"
+                />
+                {selectedFile && (
+                  <p className="text-[11px] text-emerald-400 mt-1">
+                    Selected: {selectedFile.name} ({selectedFile.size})
+                  </p>
+                )}
               </div>
               <div className="flex justify-end gap-3 pt-2">
                 <button type="button" onClick={() => setActiveUploadAsgn(null)} className="px-3 py-1.5 text-xs text-slate-300">

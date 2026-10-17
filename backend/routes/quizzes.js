@@ -19,16 +19,25 @@ router.get('/', async (req, res) => {
     let query = {};
 
     if (role === 'student' && userId && userId !== 'system') {
-      const student = await req.tenantDb.User.findById(userId);
-      if (!student?.assignedClassId) {
+      const student = await req.tenantDb.User.findById(userId).catch(() => null);
+      const studentClassId = student?.assignedClassId || (student?.assignedClassIds && student?.assignedClassIds[0]);
+      if (!studentClassId) {
         return res.json({ quizzes: [], attempts: [] });
       }
       query = {
-        targetClassIds: student.assignedClassId,
+        targetClassIds: studentClassId,
         isPublished: true,
       };
     } else if (role === 'teacher' && userId && userId !== 'system') {
-      query = { teacherId: userId };
+      const teacher = await req.tenantDb.User.findById(userId).catch(() => null);
+      const assignedClasses = teacher?.assignedClassIds || [];
+      query = {
+        $or: [
+          { teacherId: userId },
+          { teacherName: req.user?.fullName },
+          ...(assignedClasses.length > 0 ? [{ targetClassIds: { $in: assignedClasses } }] : []),
+        ],
+      };
     }
 
     const quizzes = await req.tenantDb.Quiz.find(query).sort({ createdAt: -1 });
@@ -81,12 +90,44 @@ router.post('/', authorizeRoles('admin', 'teacher'), async (req, res) => {
   try {
     const { title, subject, description, targetClassIds, durationMinutes, questions, isPublished } = req.body;
 
-    if (!title || !subject || !targetClassIds || targetClassIds.length === 0 || !questions || questions.length === 0) {
+    const classIds = Array.isArray(targetClassIds)
+      ? targetClassIds.filter((id) => Boolean(id && String(id).trim()))
+      : targetClassIds ? [String(targetClassIds).trim()] : [];
+
+    if (!title || !title.trim()) {
       return res.status(400).json({
         error: 'MissingFields',
-        message: 'Title, subject, target class(es), and at least one question are required.',
+        message: 'Quiz title is required.',
       });
     }
+
+    if (!subject || !subject.trim()) {
+      return res.status(400).json({
+        error: 'MissingFields',
+        message: 'Subject is required.',
+      });
+    }
+
+    if (classIds.length === 0) {
+      return res.status(400).json({
+        error: 'MissingFields',
+        message: 'Please select at least one target class.',
+      });
+    }
+
+    if (!questions || questions.length === 0) {
+      return res.status(400).json({
+        error: 'MissingFields',
+        message: 'At least one question is required.',
+      });
+    }
+
+    // Validate classes exist
+    const matchedClasses = await req.tenantDb.Class.find({
+      $or: [{ _id: { $in: classIds.filter((id) => id.match(/^[0-9a-fA-F]{24}$/)) } }, { id: { $in: classIds } }],
+    });
+
+    const validatedClassIds = matchedClasses.length > 0 ? matchedClasses.map((c) => c._id.toString()) : classIds;
 
     const totalMarks = questions.reduce((sum, q) => sum + (Number(q.marks) || 5), 0);
     const passMarks = Math.ceil(totalMarks * 0.4);
@@ -94,11 +135,11 @@ router.post('/', authorizeRoles('admin', 'teacher'), async (req, res) => {
     const quiz = await req.tenantDb.Quiz.create({
       title: title.trim(),
       subject: subject.trim(),
-      description: description || '',
-      targetClassIds,
+      description: description ? description.trim() : '',
+      targetClassIds: validatedClassIds,
       teacherId: req.user.id,
-      teacherName: req.user.fullName,
-      durationMinutes: Number(durationMinutes) || 30,
+      teacherName: req.user.fullName || req.user.username || 'Faculty',
+      durationMinutes: Math.max(5, Number(durationMinutes) || 30),
       totalMarks,
       passMarks,
       questions,

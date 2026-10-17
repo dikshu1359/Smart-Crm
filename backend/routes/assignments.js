@@ -19,13 +19,22 @@ router.get('/', async (req, res) => {
     let query = {};
 
     if (role === 'student' && userId && userId !== 'system') {
-      const student = await req.tenantDb.User.findById(userId);
-      if (!student?.assignedClassId) {
+      const student = await req.tenantDb.User.findById(userId).catch(() => null);
+      const studentClassId = student?.assignedClassId || (student?.assignedClassIds && student?.assignedClassIds[0]);
+      if (!studentClassId) {
         return res.json({ assignments: [], count: 0 });
       }
-      query.targetClassIds = student.assignedClassId;
+      query = { targetClassIds: studentClassId };
     } else if (role === 'teacher' && userId && userId !== 'system') {
-      query.teacherId = userId;
+      const teacher = await req.tenantDb.User.findById(userId).catch(() => null);
+      const assignedClasses = teacher?.assignedClassIds || [];
+      query = {
+        $or: [
+          { teacherId: userId },
+          { teacherName: req.user?.fullName },
+          ...(assignedClasses.length > 0 ? [{ targetClassIds: { $in: assignedClasses } }] : []),
+        ],
+      };
     }
 
     const assignments = await req.tenantDb.Assignment.find(query).sort({ createdAt: -1 });
@@ -59,47 +68,87 @@ router.get('/', async (req, res) => {
  */
 router.post('/', authorizeRoles('admin', 'teacher'), async (req, res) => {
   try {
-    const { title, subject, description, targetClassIds, dueDate, maxMarks, attachments } = req.body;
+    const { title, subject, description, targetClassIds, dueDate, issueDate, maxMarks, attachments } = req.body;
 
-    if (!title || !subject || !targetClassIds || targetClassIds.length === 0 || !dueDate) {
+    const classIds = Array.isArray(targetClassIds)
+      ? targetClassIds.filter((id) => Boolean(id && String(id).trim()))
+      : targetClassIds ? [String(targetClassIds).trim()] : [];
+
+    if (!title || !title.trim()) {
       return res.status(400).json({
         error: 'MissingFields',
-        message: 'Title, subject, target class(es), and due date are required.',
+        message: 'Assignment title is required.',
       });
     }
+
+    if (!subject || !subject.trim()) {
+      return res.status(400).json({
+        error: 'MissingFields',
+        message: 'Academic subject is required.',
+      });
+    }
+
+    if (classIds.length === 0) {
+      return res.status(400).json({
+        error: 'MissingFields',
+        message: 'Please select at least one target class for this assignment.',
+      });
+    }
+
+    if (!dueDate) {
+      return res.status(400).json({
+        error: 'MissingFields',
+        message: 'Assignment deadline / due date is required.',
+      });
+    }
+
+    // Validate classes exist in tenant
+    const matchedClasses = await req.tenantDb.Class.find({
+      $or: [{ _id: { $in: classIds.filter((id) => id.match(/^[0-9a-fA-F]{24}$/)) } }, { id: { $in: classIds } }],
+    });
+
+    const validatedClassIds = matchedClasses.length > 0 ? matchedClasses.map((c) => c._id.toString()) : classIds;
 
     const newAssignment = await req.tenantDb.Assignment.create({
       title: title.trim(),
       subject: subject.trim(),
-      description: description || '',
-      targetClassIds,
+      description: description ? description.trim() : 'Complete the assigned questions and submit your solution.',
+      targetClassIds: validatedClassIds,
       teacherId: req.user.id,
-      teacherName: req.user.fullName,
-      dueDate,
-      maxMarks: Number(maxMarks) || 100,
-      attachments: attachments || [],
+      teacherName: req.user.fullName || req.user.username || 'Faculty',
+      issueDate: issueDate || new Date().toISOString(),
+      dueDate: new Date(dueDate).toISOString(),
+      maxMarks: Math.max(1, Number(maxMarks) || 100),
+      attachments: Array.isArray(attachments) ? attachments : [],
     });
 
     // Create automatic notification for students
     await req.tenantDb.Notice.create({
       title: `New Assignment: ${newAssignment.title}`,
-      content: `A new assignment has been posted for ${newAssignment.subject}. Due: ${new Date(dueDate).toLocaleDateString()}. Maximum Marks: ${newAssignment.maxMarks}.`,
+      content: `A new assignment has been posted for ${newAssignment.subject}. Due: ${new Date(newAssignment.dueDate).toLocaleDateString()}. Maximum Marks: ${newAssignment.maxMarks}.`,
       category: 'Assignment',
       targetRole: 'student',
-      authorName: req.user.fullName,
-      authorRole: req.user.role,
-    });
+      authorName: req.user.fullName || 'Faculty',
+      authorRole: req.user.role || 'teacher',
+    }).catch(() => null);
 
     await dbManager.logActivity({
       databaseName: req.databaseName,
       institutionName: req.user.institutionName,
-      actorName: req.user.fullName,
+      actorName: req.user.fullName || req.user.username,
       actorRole: req.user.role,
       actionCategory: 'ASSIGNMENT',
-      description: `Published assignment "${newAssignment.title}" (${newAssignment.subject})`,
-    });
+      description: `Published assignment "${newAssignment.title}" (${newAssignment.subject}) for ${validatedClassIds.length} classes`,
+    }).catch(() => null);
 
-    res.status(201).json({ success: true, assignment: newAssignment });
+    const formattedAssignment = {
+      ...newAssignment.toObject(),
+      id: newAssignment._id.toString(),
+      submissions: [],
+      submissionCount: 0,
+    };
+
+    res.status(201).json({ success: true, assignment: formattedAssignment });
   } catch (err) {
     res.status(500).json({ error: 'CreateAssignmentError', message: err.message });
   }

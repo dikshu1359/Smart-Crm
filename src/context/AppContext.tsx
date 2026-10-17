@@ -14,6 +14,7 @@ import {
   InstitutionRegistry,
   CalendarEvent,
   AttendanceSession,
+  StudentMarksRecord,
 } from '../types/crm';
 import api from '../services/api';
 
@@ -48,6 +49,7 @@ interface AppContextValue {
   calendarEvents: CalendarEvent[];
   attendanceSessions: AttendanceSession[];
   attendanceSummary: any;
+  marks: StudentMarksRecord[];
 
   // Actions
   setCurrentView: (view: AppView) => void;
@@ -78,7 +80,7 @@ interface AppContextValue {
   createClass: (classPayload: any) => Promise<{ ok: boolean; message?: string }>;
   allotStudent: (classId: string, studentId: string) => Promise<{ ok: boolean; message?: string }>;
   deleteClass: (classId: string) => Promise<{ ok: boolean; message?: string }>;
-  createAssignment: (payload: any) => Promise<{ ok: boolean; message?: string }>;
+  createAssignment: (payload: any) => Promise<{ ok: boolean; message?: string; assignment?: any }>;
   submitAssignment: (assignmentId: string, payload: any) => Promise<{ ok: boolean; message?: string }>;
   reviewSubmission: (
     assignmentId: string,
@@ -102,6 +104,9 @@ interface AppContextValue {
   deleteNotice: (noticeId: string) => Promise<{ ok: boolean; message?: string }>;
   sendChatMessage: (recipientId: string, text: string) => Promise<{ ok: boolean; message?: string }>;
   deleteTenant: (databaseName: string) => Promise<{ ok: boolean; message?: string }>;
+  fetchMarks: (filter?: { classId?: string; subject?: string; assessmentTitle?: string }) => Promise<StudentMarksRecord[]>;
+  saveMarksBatch: (payload: any) => Promise<{ ok: boolean; message?: string; count?: number }>;
+  importClassRoster: (classId: string, students: any[]) => Promise<{ ok: boolean; message?: string; importedCount?: number; createdCount?: number; updatedCount?: number }>;
 }
 
 const AppContext = createContext<AppContextValue | null>(null);
@@ -136,6 +141,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [calendarEvents, setCalendarEvents] = useState<CalendarEvent[]>([]);
   const [attendanceSessions, setAttendanceSessions] = useState<AttendanceSession[]>([]);
   const [attendanceSummary, setAttendanceSummary] = useState<any>(null);
+  const [marks, setMarks] = useState<StudentMarksRecord[]>([]);
 
   const setCurrentView = (view: AppView) => {
     // Protected routes check: Cannot open dashboard if unauthenticated
@@ -177,6 +183,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         calendarRes,
         attendanceSumRes,
         attendanceLogsRes,
+        marksRes,
       ] = await Promise.all([
         api.getUsers(dbName),
         api.getClasses(dbName),
@@ -190,6 +197,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         api.getCalendarEvents(dbName),
         api.getAttendanceSummary(dbName),
         api.getAttendance(dbName),
+        api.getMarks(dbName).catch(() => null),
       ]);
 
       if (usersRes?.users) {
@@ -228,6 +236,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       }
       if (attendanceLogsRes?.attendance) {
         setAttendanceSessions(attendanceLogsRes.attendance.map((s: any) => ({ ...s, id: s.id || s._id?.toString() })));
+      }
+      if (marksRes?.marks) {
+        setMarks(marksRes.marks.map((m: any) => ({ ...m, id: m.id || m._id?.toString() })));
       }
     } catch (err: any) {
       console.error('[AppContext] Failed to refresh tenant data:', err.message);
@@ -423,7 +434,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       const res = await api.createAssignment(activeTenant.databaseName, payload);
       if (!res.success) return { ok: false, message: res.message || 'Failed to create assignment.' };
       await refreshData();
-      return { ok: true };
+      return { ok: true, assignment: res.assignment };
     } catch (err: any) {
       return { ok: false, message: err.message };
     }
@@ -637,6 +648,50 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   };
 
+  const fetchMarks = async (filter?: { classId?: string; subject?: string; assessmentTitle?: string }) => {
+    if (!activeTenant) return [];
+    try {
+      const res = await api.getMarks(activeTenant.databaseName, filter);
+      if (res.success && res.marks) {
+        setMarks(res.marks.map((m: any) => ({ ...m, id: m.id || m._id?.toString() })));
+        return res.marks;
+      }
+      return [];
+    } catch {
+      return [];
+    }
+  };
+
+  const saveMarksBatch = async (payload: any) => {
+    if (!activeTenant) return { ok: false, message: 'No active institution.' };
+    try {
+      const res = await api.saveMarksBatch(activeTenant.databaseName, payload);
+      if (!res.success) return { ok: false, message: res.message || 'Failed to save marks.' };
+      await refreshData();
+      return { ok: true, count: res.count };
+    } catch (err: any) {
+      return { ok: false, message: err.message };
+    }
+  };
+
+  const importClassRoster = async (classId: string, students: any[]) => {
+    if (!activeTenant) return { ok: false, message: 'No active institution.' };
+    try {
+      const res = await api.importClassRoster(activeTenant.databaseName, classId, students);
+      if (!res.success) return { ok: false, message: res.message || 'Failed to import roster.' };
+      await refreshData();
+      return {
+        ok: true,
+        message: res.message,
+        importedCount: res.importedCount,
+        createdCount: res.createdCount,
+        updatedCount: res.updatedCount,
+      };
+    } catch (err: any) {
+      return { ok: false, message: err.message };
+    }
+  };
+
   return (
     <AppContext.Provider
       value={{
@@ -662,6 +717,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         calendarEvents,
         attendanceSessions,
         attendanceSummary,
+        marks,
         setCurrentView,
         setSelectedRole,
         setActiveTab,
@@ -693,6 +749,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         deleteNotice,
         sendChatMessage,
         deleteTenant,
+        fetchMarks,
+        saveMarksBatch,
+        importClassRoster,
       }}
     >
       {children}

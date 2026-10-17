@@ -39,6 +39,7 @@ export const AssignmentSchema = {
   teacherId: { type: String, required: true },
   teacherName: { type: String, required: true },
   targetClassIds: [String],
+  issueDate: { type: String, default: () => new Date().toISOString() },
   dueDate: { type: String, required: true },
   maxMarks: { type: Number, default: 100 },
   createdAt: { type: String, default: () => new Date().toISOString() },

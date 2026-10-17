@@ -17,6 +17,7 @@ import auditRouter from './routes/audit.js';
 import analyticsRouter from './routes/analytics.js';
 import calendarRouter from './routes/calendar.js';
 import attendanceRouter from './routes/attendance.js';
+import marksRouter from './routes/marks.js';
 
 dotenv.config();
 
@@ -71,6 +72,7 @@ app.use('/api/audit', auditRouter);
 app.use('/api/analytics', analyticsRouter);
 app.use('/api/calendar', calendarRouter);
 app.use('/api/attendance', attendanceRouter);
+app.use('/api/marks', marksRouter);
 
 // 404 Route handler
 app.use('/api/*', (req, res) => {

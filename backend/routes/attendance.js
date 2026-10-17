@@ -210,7 +210,14 @@ router.post('/', authorizeRoles('admin', 'teacher'), async (req, res) => {
       });
     }
 
-    const targetClass = await req.tenantDb.Class.findById(classId);
+    let targetClass = null;
+    if (classId) {
+      if (classId.match(/^[0-9a-fA-F]{24}$/)) {
+        targetClass = await req.tenantDb.Class.findById(classId).catch(() => null);
+      } else {
+        targetClass = await req.tenantDb.Class.findOne({ id: classId }).catch(() => null);
+      }
+    }
 
     await dbManager.logActivity({
       databaseName: req.databaseName,

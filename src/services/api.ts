@@ -423,6 +423,49 @@ export const api = {
     });
     return res.json();
   },
+
+  // Marks & Gradebook Spreadsheet
+  async getMarks(
+    databaseName: string,
+    filter?: { classId?: string; subject?: string; assessmentTitle?: string }
+  ) {
+    const params = new URLSearchParams();
+    if (filter?.classId) params.append('classId', filter.classId);
+    if (filter?.subject) params.append('subject', filter.subject);
+    if (filter?.assessmentTitle) params.append('assessmentTitle', filter.assessmentTitle);
+
+    const res = await fetch(`${BASE_URL}/marks?${params.toString()}`, {
+      headers: getAuthHeaders(databaseName),
+    });
+    return res.json();
+  },
+
+  async saveMarksBatch(databaseName: string, payload: any) {
+    const res = await fetch(`${BASE_URL}/marks/batch`, {
+      method: 'POST',
+      headers: getAuthHeaders(databaseName),
+      body: JSON.stringify(payload),
+    });
+    return res.json();
+  },
+
+  async getStudentMarksSummary(databaseName: string) {
+    const res = await fetch(`${BASE_URL}/marks/student-summary`, {
+      headers: getAuthHeaders(databaseName),
+    });
+    return res.json();
+  },
+
+  // Class Roster Import
+  async importClassRoster(databaseName: string, classId: string, students: any[]) {
+    const res = await fetch(`${BASE_URL}/classes/${classId}/import-roster`, {
+      method: 'POST',
+      headers: getAuthHeaders(databaseName),
+      body: JSON.stringify({ students }),
+    });
+    return res.json();
+  },
 };
 
 export default api;
+

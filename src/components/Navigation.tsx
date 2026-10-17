@@ -17,6 +17,8 @@ import {
   X,
   Building2,
   Calendar as CalendarIcon,
+  Table,
+  FileSpreadsheet,
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { DashboardTab, UserRole } from '../types/crm';
@@ -81,6 +83,18 @@ export const Navigation: React.FC<NavigationProps> = ({ mobileOpen, setMobileOpe
       label: currentUser.role === 'student' ? 'Online Quizzes' : 'Quiz & Exam Builder',
       icon: HelpCircle,
       roles: ['admin', 'teacher', 'student'],
+    },
+    {
+      id: 'marks',
+      label: currentUser.role === 'student' ? 'My Marks & Gradebook' : 'Marks Spreadsheet',
+      icon: Table,
+      roles: ['admin', 'teacher', 'student'],
+    },
+    {
+      id: 'roster',
+      label: 'Student Roster Import',
+      icon: FileSpreadsheet,
+      roles: ['admin', 'teacher'],
     },
     {
       id: 'schedule',

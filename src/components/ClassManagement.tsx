@@ -4,7 +4,7 @@ import { useApp } from '../context/AppContext';
 import { SchoolClass, TenantUser } from '../types/crm';
 
 export const ClassManagement: React.FC = () => {
-  const { activeTenant, currentUser, classes, users, createClass, deleteClass, allotStudent } = useApp();
+  const { activeTenant, currentUser, classes, users, createClass, deleteClass, allotStudent, setActiveTab } = useApp();
   if (!activeTenant || !currentUser) return null;
 
   const [showCreateModal, setShowCreateModal] = useState(false);
@@ -41,14 +41,22 @@ export const ClassManagement: React.FC = () => {
           <h1 className="text-2xl font-bold text-white font-display">Class &amp; Student Allotment Management</h1>
           <p className="text-xs text-slate-400 mt-1">Create cohorts, assign faculty, and allot student rosters.</p>
         </div>
-        {currentUser.role === 'admin' && (
+        <div className="flex items-center gap-2.5">
           <button
-            onClick={() => setShowCreateModal(true)}
-            className="px-4 py-2 text-xs font-semibold text-white bg-purple-600 rounded-xl hover:bg-purple-500 cursor-pointer"
+            onClick={() => setActiveTab('roster')}
+            className="px-4 py-2 text-xs font-semibold text-purple-300 bg-purple-500/10 hover:bg-purple-500/20 border border-purple-500/30 rounded-xl transition-all cursor-pointer flex items-center gap-1.5"
           >
-            + Create Class
+            <span>Upload Student Roster</span>
           </button>
-        )}
+          {currentUser.role === 'admin' && (
+            <button
+              onClick={() => setShowCreateModal(true)}
+              className="px-4 py-2 text-xs font-semibold text-white bg-purple-600 rounded-xl hover:bg-purple-500 cursor-pointer"
+            >
+              + Create Class
+            </button>
+          )}
+        </div>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">

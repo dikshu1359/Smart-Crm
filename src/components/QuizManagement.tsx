@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import {
   HelpCircle,
   Plus,
@@ -13,6 +13,7 @@ import {
   Send,
   Play,
   RotateCcw,
+  Search,
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { Quiz, QuizQuestion } from '../types/crm';
@@ -36,10 +37,34 @@ export const QuizManagement: React.FC = () => {
   const [subject, setSubject] = useState('');
   const [description, setDescription] = useState('');
   const [targetClassIds, setTargetClassIds] = useState<string[]>([]);
+  const [classSearchQuery, setClassSearchQuery] = useState('');
   const [durationMinutes, setDurationMinutes] = useState(30);
   const [isPublished, setIsPublished] = useState(true);
   const [createError, setCreateError] = useState('');
   const [createLoading, setCreateLoading] = useState(false);
+
+  // Filter classes authorized for this teacher
+  const authorizedClasses = useMemo(() => {
+    if (!currentUser) return classes;
+    if (currentUser.role === 'admin') return classes;
+    const filtered = classes.filter((c) => {
+      const cId = c.id || (c as any)._id;
+      const isPrimary = c.primaryTeacherId === currentUser.id;
+      const isAssigned = currentUser.assignedClassIds?.includes(cId);
+      return isPrimary || isAssigned;
+    });
+    return filtered.length > 0 ? filtered : classes;
+  }, [classes, currentUser]);
+
+  const filteredTargetClasses = useMemo(() => {
+    if (!classSearchQuery.trim()) return authorizedClasses;
+    const q = classSearchQuery.toLowerCase();
+    return authorizedClasses.filter((c) =>
+      c.name.toLowerCase().includes(q) ||
+      c.gradeLevel.toLowerCase().includes(q) ||
+      (c.section && c.section.toLowerCase().includes(q))
+    );
+  }, [authorizedClasses, classSearchQuery]);
 
   const [questions, setQuestions] = useState<
     { questionText: string; options: string[]; correctOptionIndex: number; marks: number }[]
@@ -145,6 +170,18 @@ export const QuizManagement: React.FC = () => {
     }
   };
 
+  const handleOpenCreateQuizModal = () => {
+    setCreateError('');
+    setClassSearchQuery('');
+    if (authorizedClasses.length > 0) {
+      const firstId = authorizedClasses[0]._id || authorizedClasses[0].id!;
+      setTargetClassIds(firstId ? [firstId] : []);
+    } else {
+      setTargetClassIds([]);
+    }
+    setCreateModalOpen(true);
+  };
+
   const handleStartQuiz = (quiz: Quiz) => {
     setActiveQuizToTake(quiz);
     setStudentAnswers({});
@@ -192,7 +229,7 @@ export const QuizManagement: React.FC = () => {
 
         {isFacultyOrAdmin && (
           <button
-            onClick={() => setCreateModalOpen(true)}
+            onClick={handleOpenCreateQuizModal}
             className="px-4 py-2 text-xs font-semibold text-white bg-gradient-to-r from-purple-600 to-pink-600 rounded-xl hover:opacity-95 transition-all shadow-md shadow-purple-600/30 flex items-center gap-2 cursor-pointer"
           >
             <Plus className="w-4 h-4" />
@@ -375,34 +412,116 @@ export const QuizManagement: React.FC = () => {
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-xs font-semibold text-slate-300 mb-1.5">Target Classes *</label>
-                  <div className="space-y-1.5 max-h-32 overflow-y-auto p-2 rounded-xl bg-black/40 border border-white/10">
-                    {classes.map((c) => {
-                      const cId = c._id || c.id!;
-                      const checked = targetClassIds.includes(cId);
-                      return (
-                        <label key={cId} className="flex items-center gap-2 text-xs text-slate-300 cursor-pointer">
-                          <input
-                            type="checkbox"
-                            checked={checked}
-                            onChange={() => {
-                              if (checked) {
-                                setTargetClassIds(targetClassIds.filter((id) => id !== cId));
-                              } else {
-                                setTargetClassIds([...targetClassIds, cId]);
-                              }
-                            }}
-                            className="rounded border-white/20 text-purple-600 focus:ring-0"
-                          />
-                          <span>{c.name} ({c.gradeLevel})</span>
-                        </label>
-                      );
-                    })}
+                  <div className="flex items-center justify-between mb-1.5">
+                  <label className="block text-xs font-semibold text-slate-300">
+                    Target Classes * <span className="text-purple-400 font-mono">({targetClassIds.length} selected)</span>
+                  </label>
+                  <div className="flex items-center gap-2 text-[11px]">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const allIds = authorizedClasses.map((c) => c.id || (c as any)._id).filter(Boolean);
+                        setTargetClassIds(allIds);
+                      }}
+                      className="text-purple-400 hover:underline cursor-pointer"
+                    >
+                      Select All
+                    </button>
+                    <span className="text-slate-600">|</span>
+                    <button
+                      type="button"
+                      onClick={() => setTargetClassIds([])}
+                      className="text-slate-400 hover:underline cursor-pointer"
+                    >
+                      Clear
+                    </button>
                   </div>
                 </div>
 
-                <div>
-                  <label className="block text-xs font-semibold text-slate-300 mb-1.5">Duration (Minutes)</label>
+                {/* Selected Classes Tags */}
+                {targetClassIds.length > 0 && (
+                  <div className="flex flex-wrap gap-1.5 mb-2 p-2 rounded-xl bg-purple-950/20 border border-purple-500/20 max-h-24 overflow-y-auto">
+                    {targetClassIds.map((cId) => {
+                      const cls = authorizedClasses.find((c) => (c.id || (c as any)._id) === cId);
+                      return (
+                        <span
+                          key={cId}
+                          className="inline-flex items-center gap-1 text-[11px] bg-purple-600/30 border border-purple-400/40 text-purple-200 px-2 py-0.5 rounded-lg"
+                        >
+                          <span>{cls ? `${cls.name} (${cls.gradeLevel})` : cId}</span>
+                          <button
+                            type="button"
+                            onClick={() => setTargetClassIds(targetClassIds.filter((id) => id !== cId))}
+                            className="hover:text-white"
+                          >
+                            <X className="w-3 h-3" />
+                          </button>
+                        </span>
+                      );
+                    })}
+                  </div>
+                )}
+
+                {/* Search Box */}
+                <div className="relative mb-2">
+                  <Search className="w-3.5 h-3.5 absolute left-3 top-2.5 text-slate-400" />
+                  <input
+                    type="text"
+                    value={classSearchQuery}
+                    onChange={(e) => setClassSearchQuery(e.target.value)}
+                    placeholder="Search classes by name, grade, or section..."
+                    className="w-full pl-8 pr-3 py-1.5 text-xs bg-black/40 border border-white/10 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:border-purple-500"
+                  />
+                </div>
+
+                {/* Classes List */}
+                <div className="space-y-1 max-h-36 overflow-y-auto p-2 rounded-xl bg-black/40 border border-white/10">
+                  {filteredTargetClasses.length > 0 ? (
+                    filteredTargetClasses.map((c) => {
+                      const cId = c._id || c.id!;
+                      const checked = targetClassIds.includes(cId);
+                      return (
+                        <div
+                          key={cId}
+                          onClick={() => {
+                            if (checked) {
+                              setTargetClassIds(targetClassIds.filter((id) => id !== cId));
+                            } else {
+                              setTargetClassIds([...targetClassIds, cId]);
+                            }
+                          }}
+                          className={`flex items-center justify-between p-2 rounded-lg cursor-pointer text-xs transition-colors ${
+                            checked
+                              ? 'bg-purple-600/25 text-white font-medium'
+                              : 'text-slate-300 hover:bg-white/5'
+                          }`}
+                        >
+                          <div className="flex items-center gap-2">
+                            <input
+                              type="checkbox"
+                              checked={checked}
+                              onChange={() => {}} // handled by parent div
+                              className="rounded border-white/20 text-purple-600 focus:ring-0"
+                            />
+                            <span>{c.name}</span>
+                            <span className="text-[11px] text-slate-400">({c.gradeLevel} - {c.section || 'General'})</span>
+                          </div>
+                          <span className="text-[10px] text-slate-400 font-mono">
+                            {c.studentIds?.length || 0} students
+                          </span>
+                        </div>
+                      );
+                    })
+                  ) : (
+                    <div className="text-center py-3 text-xs text-slate-500">
+                      No matching classes found.
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-300 mb-1.5">Duration (Minutes)</label>
                   <input
                     type="number"
                     min="5"

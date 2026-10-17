@@ -110,6 +110,7 @@ export interface Assignment {
   teacherId: string;
   teacherName: string;
   targetClassIds: string[];
+  issueDate?: string;
   dueDate: string;
   maxMarks: number;
   createdAt: string;
@@ -260,12 +261,38 @@ export interface AttendanceSession {
   createdAt?: string;
 }
 
+export interface StudentMarksRecord {
+  id?: string;
+  _id?: string;
+  classId: string;
+  studentId: string;
+  studentName: string;
+  rollNumber: string;
+  subject: string;
+  assessmentTitle: string;
+  assignmentMarks: number;
+  internalMarks?: number;
+  examMarks: number;
+  otherMarks?: number;
+  totalMarks: number;
+  maxMarks: number;
+  percentage: number;
+  grade: string;
+  teacherFeedback?: string;
+  isPublished: boolean;
+  updatedByTeacherId?: string;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
 export type DashboardTab =
   | 'overview'
   | 'users'
   | 'classes'
   | 'assignments'
   | 'quizzes'
+  | 'marks'
+  | 'roster'
   | 'schedule'
   | 'calendar'
   | 'analytics'
