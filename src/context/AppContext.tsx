@@ -81,6 +81,7 @@ interface AppContextValue {
   allotStudent: (classId: string, studentId: string) => Promise<{ ok: boolean; message?: string }>;
   deleteClass: (classId: string) => Promise<{ ok: boolean; message?: string }>;
   createAssignment: (payload: any) => Promise<{ ok: boolean; message?: string; assignment?: any }>;
+  updateAssignment: (assignmentId: string, payload: any) => Promise<{ ok: boolean; message?: string; assignment?: any }>;
   submitAssignment: (assignmentId: string, payload: any) => Promise<{ ok: boolean; message?: string }>;
   reviewSubmission: (
     assignmentId: string,
@@ -94,6 +95,7 @@ interface AppContextValue {
   submitQuiz: (quizId: string, answers: any[]) => Promise<{ ok: boolean; message?: string }>;
   togglePublishQuiz: (quizId: string, isPublished: boolean) => Promise<{ ok: boolean; message?: string }>;
   addScheduleSlot: (slotPayload: any) => Promise<{ ok: boolean; message?: string }>;
+  updateScheduleSlot: (slotId: string, slotPayload: any) => Promise<{ ok: boolean; message?: string }>;
   deleteScheduleSlot: (slotId: string) => Promise<{ ok: boolean; message?: string }>;
   createCalendarEvent: (payload: any) => Promise<{ ok: boolean; message?: string; overlapWarning?: string | null }>;
   updateCalendarEvent: (eventId: string, payload: any) => Promise<{ ok: boolean; message?: string }>;
@@ -102,7 +104,7 @@ interface AppContextValue {
   createNotice: (payload: any) => Promise<{ ok: boolean; message?: string }>;
   markNoticeRead: (noticeId: string) => Promise<{ ok: boolean; message?: string }>;
   deleteNotice: (noticeId: string) => Promise<{ ok: boolean; message?: string }>;
-  sendChatMessage: (recipientId: string, text: string) => Promise<{ ok: boolean; message?: string }>;
+  sendChatMessage: (recipientId: string, text: string, attachments?: any[]) => Promise<{ ok: boolean; message?: string }>;
   deleteTenant: (databaseName: string) => Promise<{ ok: boolean; message?: string }>;
   fetchMarks: (filter?: { classId?: string; subject?: string; assessmentTitle?: string }) => Promise<StudentMarksRecord[]>;
   saveMarksBatch: (payload: any) => Promise<{ ok: boolean; message?: string; count?: number }>;
@@ -470,6 +472,18 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   };
 
+  const updateAssignment = async (assignmentId: string, payload: any) => {
+    if (!activeTenant) return { ok: false, message: 'No active institution.' };
+    try {
+      const res = await api.updateAssignment(activeTenant.databaseName, assignmentId, payload);
+      if (!res.success) return { ok: false, message: res.message || 'Failed to update assignment.' };
+      await refreshData();
+      return { ok: true, assignment: res.assignment };
+    } catch (err: any) {
+      return { ok: false, message: err.message };
+    }
+  };
+
   const deleteAssignment = async (assignmentId: string) => {
     if (!activeTenant) return { ok: false, message: 'No active institution.' };
     try {
@@ -530,6 +544,18 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   };
 
+  const updateScheduleSlot = async (slotId: string, slotPayload: any) => {
+    if (!activeTenant) return { ok: false, message: 'No active institution.' };
+    try {
+      const res = await api.updateScheduleSlot(activeTenant.databaseName, slotId, slotPayload);
+      if (!res.success) return { ok: false, message: res.message || 'Failed to update schedule slot.' };
+      await refreshData();
+      return { ok: true };
+    } catch (err: any) {
+      return { ok: false, message: err.message };
+    }
+  };
+
   const deleteScheduleSlot = async (slotId: string) => {
     if (!activeTenant) return { ok: false, message: 'No active institution.' };
     try {
@@ -577,10 +603,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   };
 
-  const sendChatMessage = async (recipientId: string, text: string) => {
+  const sendChatMessage = async (recipientId: string, text: string, attachments?: any[]) => {
     if (!activeTenant) return { ok: false, message: 'No active institution.' };
     try {
-      const res = await api.sendChatMessage(activeTenant.databaseName, recipientId, text);
+      const res = await api.sendChatMessage(activeTenant.databaseName, recipientId, text, attachments);
       if (!res.success) return { ok: false, message: res.message || 'Failed to send message.' };
       return { ok: true };
     } catch (err: any) {
@@ -732,6 +758,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         allotStudent,
         deleteClass,
         createAssignment,
+        updateAssignment,
         submitAssignment,
         reviewSubmission,
         deleteAssignment,
@@ -739,6 +766,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         submitQuiz,
         togglePublishQuiz,
         addScheduleSlot,
+        updateScheduleSlot,
         deleteScheduleSlot,
         createCalendarEvent,
         updateCalendarEvent,

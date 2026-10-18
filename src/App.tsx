@@ -10,6 +10,8 @@ import { TeacherAssignments } from './components/TeacherAssignments';
 import { StudentAssignments } from './components/StudentAssignments';
 import { QuizManagement } from './components/QuizManagement';
 import { MarksSpreadsheet } from './components/MarksSpreadsheet';
+import { StudentAttendance } from './components/StudentAttendance';
+import { StudentImportantInformation } from './components/StudentImportantInformation';
 import { StudentRosterImport } from './components/StudentRosterImport';
 import { ScheduleManagement } from './components/ScheduleManagement';
 import { AcademicCalendar } from './components/AcademicCalendar';
@@ -60,15 +62,19 @@ const CRMWorkspaceShell: React.FC = () => {
           {activeTab === 'overview' && <DashboardOverview />}
           {activeTab === 'users' && (currentUser.role === 'admin' ? <UserManagement /> : <DashboardOverview />)}
           {activeTab === 'classes' && (currentUser.role !== 'student' ? <ClassManagement /> : <DashboardOverview />)}
+          {activeTab === 'attendance' && <StudentAttendance />}
+          {activeTab === 'student-data' && <StudentImportantInformation />}
           {activeTab === 'assignments' &&
             (currentUser.role === 'student' ? (
               <StudentAssignments />
-            ) : (
+            ) : currentUser.role === 'teacher' ? (
               <TeacherAssignments />
+            ) : (
+              <DashboardOverview />
             ))}
           {activeTab === 'quizzes' && <QuizManagement />}
           {activeTab === 'marks' && <MarksSpreadsheet />}
-          {activeTab === 'roster' && (currentUser.role !== 'student' ? <StudentRosterImport /> : <DashboardOverview />)}
+          {activeTab === 'roster' && (currentUser.role === 'teacher' ? <StudentAttendance /> : <DashboardOverview />)}
           {activeTab === 'schedule' && <ScheduleManagement />}
           {activeTab === 'calendar' && <AcademicCalendar />}
           {activeTab === 'analytics' && <PerformanceAnalytics />}

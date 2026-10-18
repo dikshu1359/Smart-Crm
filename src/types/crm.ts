@@ -58,6 +58,26 @@ export interface TenantUser {
   guardianContact?: string;
   assignedClassId?: string;
   mustChangePassword?: boolean;
+  // Extended Student Profile Fields
+  dateOfBirth?: string;
+  gender?: string;
+  residentialAddress?: string;
+  religion?: string;
+  casteCategory?: string;
+  departmentBranch?: string;
+  classDivision?: string;
+  admissionId?: string;
+  academicYear?: string;
+  fatherName?: string;
+  fatherContact?: string;
+  motherName?: string;
+  motherContact?: string;
+  guardianInfo?: string;
+  previousQualification?: string;
+  previousInstitution?: string;
+  previousExamDetails?: string;
+  photoUrl?: string;
+  signatureUrl?: string;
 }
 
 export interface SchoolClass {
@@ -172,6 +192,7 @@ export interface ChatMessage {
   recipientName: string;
   recipientRole: UserRole;
   text: string;
+  attachments?: FileAttachment[];
   read: boolean;
   createdAt: string;
 }
@@ -183,6 +204,9 @@ export interface ChatContact {
   role: UserRole;
   email: string;
   unreadCount: number;
+  photoUrl?: string;
+  specialization?: string;
+  assignedClassId?: string;
 }
 
 export type DayOfWeek = 'Monday' | 'Tuesday' | 'Wednesday' | 'Thursday' | 'Friday';
@@ -199,7 +223,7 @@ export interface ScheduleSlot {
   id?: string;
   _id?: string;
   day: DayOfWeek;
-  timeSlot: TimeSlotInterval;
+  timeSlot: TimeSlotInterval | string;
   classId: string;
   subject: string;
   teacherId: string;
@@ -293,6 +317,8 @@ export type DashboardTab =
   | 'quizzes'
   | 'marks'
   | 'roster'
+  | 'attendance'
+  | 'student-data'
   | 'schedule'
   | 'calendar'
   | 'analytics'

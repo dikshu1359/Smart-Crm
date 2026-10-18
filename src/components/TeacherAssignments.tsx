@@ -14,12 +14,13 @@ import {
   Check,
   Paperclip,
   Trash2,
+  Pencil,
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { Assignment, FileAttachment, StudentSubmission, SubmissionStatus, SchoolClass } from '../types/crm';
 
 export const TeacherAssignments: React.FC = () => {
-  const { activeTenant, currentUser, assignments, classes, createAssignment, deleteAssignment, reviewSubmission } = useApp();
+  const { activeTenant, currentUser, assignments, classes, createAssignment, updateAssignment, deleteAssignment, reviewSubmission } = useApp();
   if (!activeTenant || !currentUser) return null;
 
   // Active assignment selection
@@ -29,6 +30,7 @@ export const TeacherAssignments: React.FC = () => {
 
   // Modal & form states
   const [showCreateModal, setShowCreateModal] = useState(false);
+  const [editingAssignment, setEditingAssignment] = useState<Assignment | null>(null);
   const [title, setTitle] = useState('');
   const [subject, setSubject] = useState('');
   const [description, setDescription] = useState('');
@@ -93,6 +95,7 @@ export const TeacherAssignments: React.FC = () => {
 
   // Open modal with pre-initialized class selection
   const handleOpenCreateModal = () => {
+    setEditingAssignment(null);
     setFormError(null);
     setTitle('');
     setSubject('');
@@ -109,6 +112,22 @@ export const TeacherAssignments: React.FC = () => {
     } else {
       setTargetClassIds([]);
     }
+    setShowCreateModal(true);
+  };
+
+  // Open modal for editing an existing assignment
+  const handleOpenEditModal = (asgn: Assignment) => {
+    setEditingAssignment(asgn);
+    setFormError(null);
+    setTitle(asgn.title || '');
+    setSubject(asgn.subject || '');
+    setDescription(asgn.description || '');
+    setIssueDate(asgn.issueDate ? asgn.issueDate.split('T')[0] : todayStr);
+    setDueDate(asgn.dueDate ? asgn.dueDate.split('T')[0] : defaultDueStr);
+    setMaxMarks(asgn.maxMarks || 100);
+    setTargetClassIds(asgn.targetClassIds || []);
+    setAttachments(asgn.attachments || []);
+    setClassSearchQuery('');
     setShowCreateModal(true);
   };
 
@@ -201,19 +220,34 @@ export const TeacherAssignments: React.FC = () => {
     setIsSubmitting(true);
 
     try {
-      const res = await createAssignment({
-        title: title.trim(),
-        subject: subject.trim(),
-        description: description.trim() || 'Complete the assigned questions and submit your solution.',
-        targetClassIds,
-        issueDate: new Date(issueDate).toISOString(),
-        dueDate: new Date(dueDate).toISOString(),
-        maxMarks: Number(maxMarks) || 100,
-        attachments,
-      });
+      let res;
+      if (editingAssignment) {
+        const asgnId = editingAssignment.id || (editingAssignment as any)._id;
+        res = await updateAssignment(asgnId, {
+          title: title.trim(),
+          subject: subject.trim(),
+          description: description.trim() || 'Complete the assigned questions and submit your solution.',
+          targetClassIds,
+          issueDate: new Date(issueDate).toISOString(),
+          dueDate: new Date(dueDate).toISOString(),
+          maxMarks: Number(maxMarks) || 100,
+          attachments,
+        });
+      } else {
+        res = await createAssignment({
+          title: title.trim(),
+          subject: subject.trim(),
+          description: description.trim() || 'Complete the assigned questions and submit your solution.',
+          targetClassIds,
+          issueDate: new Date(issueDate).toISOString(),
+          dueDate: new Date(dueDate).toISOString(),
+          maxMarks: Number(maxMarks) || 100,
+          attachments,
+        });
+      }
 
       if (!res.ok) {
-        setFormError(res.message || 'Failed to publish assignment. Please try again.');
+        setFormError(res.message || 'Failed to save assignment. Please try again.');
         setIsSubmitting(false);
         return;
       }
@@ -221,10 +255,16 @@ export const TeacherAssignments: React.FC = () => {
       // Success
       setIsSubmitting(false);
       setShowCreateModal(false);
-      setSuccessToast(`Assignment "${title.trim()}" published successfully to ${targetClassIds.length} classes.`);
+      setSuccessToast(
+        editingAssignment
+          ? `Assignment "${title.trim()}" updated successfully.`
+          : `Assignment "${title.trim()}" published successfully to ${targetClassIds.length} classes.`
+      );
 
       if (res.assignment?.id) {
         setSelectedAssignmentId(res.assignment.id);
+      } else if (editingAssignment) {
+        setSelectedAssignmentId(editingAssignment.id || (editingAssignment as any)._id);
       }
 
       // Auto dismiss toast
@@ -388,6 +428,13 @@ export const TeacherAssignments: React.FC = () => {
                     <div className="text-xs text-slate-400">Maximum Score</div>
                     <div className="text-lg font-bold font-mono text-emerald-400">{selectedAssignment.maxMarks} Pts</div>
                   </div>
+                  <button
+                    onClick={() => handleOpenEditModal(selectedAssignment)}
+                    className="p-2 text-slate-400 hover:text-purple-300 hover:bg-purple-500/10 rounded-xl transition-all cursor-pointer"
+                    title="Edit Assignment"
+                  >
+                    <Pencil className="w-4 h-4" />
+                  </button>
                   <button
                     onClick={() => handleDeleteAssignment(selectedAssignment.id || (selectedAssignment as any)._id, selectedAssignment.title)}
                     className="p-2 text-slate-400 hover:text-red-400 hover:bg-red-500/10 rounded-xl transition-all cursor-pointer"
@@ -627,8 +674,14 @@ export const TeacherAssignments: React.FC = () => {
           <div className="bg-[#121124] rounded-2xl max-w-2xl w-full p-6 sm:p-7 border border-white/15 shadow-2xl my-8 max-h-[92vh] overflow-y-auto">
             <div className="flex justify-between items-center pb-4 border-b border-white/10 mb-4">
               <div>
-                <h3 className="text-lg font-bold text-white font-display">Create Multi-Class Assignment</h3>
-                <p className="text-xs text-slate-400 mt-0.5">Author assignments, configure target classes, attachments, and deadlines.</p>
+                <h3 className="text-lg font-bold text-white font-display">
+                  {editingAssignment ? 'Edit Multi-Class Assignment' : 'Create Multi-Class Assignment'}
+                </h3>
+                <p className="text-xs text-slate-400 mt-0.5">
+                  {editingAssignment
+                    ? 'Modify assignment details, target classes, attachments, and deadlines.'
+                    : 'Author assignments, configure target classes, attachments, and deadlines.'}
+                </p>
               </div>
               <button
                 onClick={() => setShowCreateModal(false)}
@@ -880,10 +933,10 @@ export const TeacherAssignments: React.FC = () => {
                   {isSubmitting ? (
                     <>
                       <span className="w-3 h-3 border-2 border-white/30 border-t-white rounded-full animate-spin"></span>
-                      <span>Publishing Assignment...</span>
+                      <span>{editingAssignment ? 'Saving Changes...' : 'Publishing Assignment...'}</span>
                     </>
                   ) : (
-                    <span>Publish Assignment</span>
+                    <span>{editingAssignment ? 'Save Changes' : 'Publish Assignment'}</span>
                   )}
                 </button>
               </div>

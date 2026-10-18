@@ -8,31 +8,34 @@ router.use(tenantAuth);
 /**
  * GET /api/assignments
  * List assignments for current user
- * - Admin: all assignments
  * - Teacher: assignments created by teacher or targeting assigned classes
  * - Student: assignments targeting student's assigned class
+ * - Admin: all assignments
  */
 router.get('/', async (req, res) => {
   try {
     const role = req.user?.role || 'admin';
-    const userId = req.user?.id;
+    const userId = req.user?.id || req.user?._id;
     let query = {};
 
     if (role === 'student' && userId && userId !== 'system') {
       const student = await req.tenantDb.User.findById(userId).catch(() => null);
-      const studentClassId = student?.assignedClassId || (student?.assignedClassIds && student?.assignedClassIds[0]);
+      const studentClassId = student?.assignedClassId || (student?.assignedClassIds && student.assignedClassIds[0]);
       if (!studentClassId) {
         return res.json({ assignments: [], count: 0 });
       }
-      query = { targetClassIds: studentClassId };
+      query = { targetClassIds: String(studentClassId) };
     } else if (role === 'teacher' && userId && userId !== 'system') {
       const teacher = await req.tenantDb.User.findById(userId).catch(() => null);
       const assignedClasses = teacher?.assignedClassIds || [];
+      const primaryClasses = await req.tenantDb.Class.find({ primaryTeacherId: String(userId) });
+      const teacherClassIds = Array.from(new Set([...assignedClasses, ...primaryClasses.map((c) => c._id.toString())]));
+
       query = {
         $or: [
-          { teacherId: userId },
+          { teacherId: String(userId) },
           { teacherName: req.user?.fullName },
-          ...(assignedClasses.length > 0 ? [{ targetClassIds: { $in: assignedClasses } }] : []),
+          ...(teacherClassIds.length > 0 ? [{ targetClassIds: { $in: teacherClassIds } }] : []),
         ],
       };
     }
@@ -40,18 +43,22 @@ router.get('/', async (req, res) => {
     const assignments = await req.tenantDb.Assignment.find(query).sort({ createdAt: -1 });
 
     // Fetch submissions for these assignments
-    const assignmentIds = assignments.map((a) => a._id.toString());
+    const assignmentIds = assignments.map((a) => (a._id ? a._id.toString() : a.id));
     const submissions = await req.tenantDb.Submission.find({
       assignmentId: { $in: assignmentIds },
     });
 
     const populated = assignments.map((a) => {
-      const aObj = a.toObject();
-      const subs = submissions.filter((s) => s.assignmentId === a._id.toString());
+      const aObj = a.toObject ? a.toObject() : { ...a };
+      const aId = a._id ? a._id.toString() : a.id;
+      const subs = submissions.filter((s) => s.assignmentId === aId);
       return {
         ...aObj,
-        id: a._id.toString(),
-        submissions: subs.map((s) => ({ ...s.toObject(), id: s._id.toString() })),
+        id: aId,
+        submissions: subs.map((s) => {
+          const sObj = s.toObject ? s.toObject() : { ...s };
+          return { ...sObj, id: s._id ? s._id.toString() : s.id };
+        }),
         submissionCount: subs.length,
       };
     });
@@ -64,15 +71,13 @@ router.get('/', async (req, res) => {
 
 /**
  * POST /api/assignments
- * Teacher or Admin creates an assignment
+ * Teacher creates an assignment targeting selected classes
  */
 router.post('/', authorizeRoles('admin', 'teacher'), async (req, res) => {
   try {
-    const { title, subject, description, targetClassIds, dueDate, issueDate, maxMarks, attachments } = req.body;
+    const { title, subject, description, targetClassIds, issueDate, dueDate, maxMarks, attachments } = req.body;
 
-    const classIds = Array.isArray(targetClassIds)
-      ? targetClassIds.filter((id) => Boolean(id && String(id).trim()))
-      : targetClassIds ? [String(targetClassIds).trim()] : [];
+    const classIds = Array.isArray(targetClassIds) ? targetClassIds : targetClassIds ? [targetClassIds] : [];
 
     if (!title || !title.trim()) {
       return res.status(400).json({
@@ -102,27 +107,33 @@ router.post('/', authorizeRoles('admin', 'teacher'), async (req, res) => {
       });
     }
 
-    // Validate classes exist in tenant
-    const matchedClasses = await req.tenantDb.Class.find({
-      $or: [{ _id: { $in: classIds.filter((id) => id.match(/^[0-9a-fA-F]{24}$/)) } }, { id: { $in: classIds } }],
-    });
+    // Validate classes exist in tenant by matching either _id or id
+    const allTenantClasses = await req.tenantDb.Class.find();
+    const existingClassIds = new Set(allTenantClasses.map((c) => String(c._id || c.id)));
+    const validatedClassIds = classIds.filter((cid) => existingClassIds.has(String(cid)));
 
-    const validatedClassIds = matchedClasses.length > 0 ? matchedClasses.map((c) => c._id.toString()) : classIds;
+    if (validatedClassIds.length === 0) {
+      return res.status(400).json({
+        error: 'InvalidClasses',
+        message: 'Selected target classes were not found in this institution.',
+      });
+    }
 
     const newAssignment = await req.tenantDb.Assignment.create({
       title: title.trim(),
       subject: subject.trim(),
       description: description ? description.trim() : 'Complete the assigned questions and submit your solution.',
       targetClassIds: validatedClassIds,
-      teacherId: req.user.id,
+      teacherId: req.user.id || req.user._id,
       teacherName: req.user.fullName || req.user.username || 'Faculty',
       issueDate: issueDate || new Date().toISOString(),
       dueDate: new Date(dueDate).toISOString(),
       maxMarks: Math.max(1, Number(maxMarks) || 100),
       attachments: Array.isArray(attachments) ? attachments : [],
+      createdAt: new Date(),
     });
 
-    // Create automatic notification for students
+    // Create notification for targeted students
     await req.tenantDb.Notice.create({
       title: `New Assignment: ${newAssignment.title}`,
       content: `A new assignment has been posted for ${newAssignment.subject}. Due: ${new Date(newAssignment.dueDate).toLocaleDateString()}. Maximum Marks: ${newAssignment.maxMarks}.`,
@@ -141,9 +152,10 @@ router.post('/', authorizeRoles('admin', 'teacher'), async (req, res) => {
       description: `Published assignment "${newAssignment.title}" (${newAssignment.subject}) for ${validatedClassIds.length} classes`,
     }).catch(() => null);
 
+    const aObj = newAssignment.toObject ? newAssignment.toObject() : { ...newAssignment };
     const formattedAssignment = {
-      ...newAssignment.toObject(),
-      id: newAssignment._id.toString(),
+      ...aObj,
+      id: newAssignment._id ? newAssignment._id.toString() : newAssignment.id,
       submissions: [],
       submissionCount: 0,
     };
@@ -151,6 +163,59 @@ router.post('/', authorizeRoles('admin', 'teacher'), async (req, res) => {
     res.status(201).json({ success: true, assignment: formattedAssignment });
   } catch (err) {
     res.status(500).json({ error: 'CreateAssignmentError', message: err.message });
+  }
+});
+
+/**
+ * PUT /api/assignments/:id
+ * Teacher updates an assignment and its target classes
+ */
+router.put('/:id', authorizeRoles('admin', 'teacher'), async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { title, subject, description, targetClassIds, issueDate, dueDate, maxMarks, attachments } = req.body;
+
+    const existing = await req.tenantDb.Assignment.findById(id);
+    if (!existing) {
+      return res.status(404).json({ error: 'AssignmentNotFound', message: 'Assignment not found.' });
+    }
+
+    const updates = {};
+    if (title && title.trim()) updates.title = title.trim();
+    if (subject && subject.trim()) updates.subject = subject.trim();
+    if (description !== undefined) updates.description = description.trim();
+    if (issueDate) updates.issueDate = new Date(issueDate).toISOString();
+    if (dueDate) updates.dueDate = new Date(dueDate).toISOString();
+    if (maxMarks) updates.maxMarks = Math.max(1, Number(maxMarks) || 100);
+    if (Array.isArray(attachments)) updates.attachments = attachments;
+
+    if (targetClassIds) {
+      const classIds = Array.isArray(targetClassIds) ? targetClassIds : [targetClassIds];
+      const allTenantClasses = await req.tenantDb.Class.find();
+      const existingClassIds = new Set(allTenantClasses.map((c) => String(c._id || c.id)));
+      const validatedClassIds = classIds.filter((cid) => existingClassIds.has(String(cid)));
+      if (validatedClassIds.length > 0) {
+        updates.targetClassIds = validatedClassIds;
+      }
+    }
+
+    const updated = await req.tenantDb.Assignment.findByIdAndUpdate(id, updates, { new: true });
+
+    await dbManager.logActivity({
+      databaseName: req.databaseName,
+      institutionName: req.user.institutionName,
+      actorName: req.user.fullName || 'Faculty',
+      actorRole: req.user.role || 'teacher',
+      actionCategory: 'ASSIGNMENT',
+      description: `Updated assignment details for "${updated.title}"`,
+    }).catch(() => null);
+
+    const aObj = updated.toObject ? updated.toObject() : { ...updated };
+    aObj.id = updated._id ? updated._id.toString() : updated.id;
+
+    res.json({ success: true, assignment: aObj });
+  } catch (err) {
+    res.status(500).json({ error: 'UpdateAssignmentError', message: err.message });
   }
 });
 
@@ -167,7 +232,10 @@ router.post('/:id/submit', authorizeRoles('student'), async (req, res) => {
     if (!assignment) return res.status(404).json({ error: 'AssignmentNotFound', message: 'Assignment not found.' });
 
     const student = await req.tenantDb.User.findById(req.user.id);
-    if (!student || !assignment.targetClassIds.includes(student.assignedClassId)) {
+    const studentClassId = String(student?.assignedClassId || (student?.assignedClassIds && student.assignedClassIds[0]));
+    const targetClasses = (assignment.targetClassIds || []).map(String);
+
+    if (!student || !targetClasses.includes(studentClassId)) {
       return res.status(403).json({ error: 'Forbidden', message: 'You are not assigned to this class assignment.' });
     }
 
@@ -188,7 +256,7 @@ router.post('/:id/submit', authorizeRoles('student'), async (req, res) => {
         studentId: req.user.id,
         studentName: req.user.fullName,
         rollNumber: student.rollNumber || '',
-        classId: student.assignedClassId,
+        classId: studentClassId,
         status: 'submitted',
         studentNotes: studentNotes || '',
         attachments: attachments || [],
@@ -269,6 +337,51 @@ router.put('/:id/submissions/:studentId/review', authorizeRoles('admin', 'teache
     res.json({ success: true, submission });
   } catch (err) {
     res.status(500).json({ error: 'ReviewError', message: err.message });
+  }
+});
+
+/**
+ * PUT /api/assignments/:id
+ * Teacher or Admin updates an existing assignment details (title, subject, description, targetClassIds, dates, maxMarks, attachments)
+ */
+router.put('/:id', authorizeRoles('admin', 'teacher'), async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { title, subject, description, targetClassIds, issueDate, dueDate, maxMarks, attachments } = req.body;
+
+    const assignment = await req.tenantDb.Assignment.findById(id);
+    if (!assignment) {
+      return res.status(404).json({ error: 'AssignmentNotFound', message: 'Assignment not found.' });
+    }
+
+    if (title) assignment.title = title.trim();
+    if (subject) assignment.subject = subject.trim();
+    if (description !== undefined) assignment.description = description.trim();
+    if (Array.isArray(targetClassIds) && targetClassIds.length > 0) {
+      assignment.targetClassIds = targetClassIds;
+    }
+    if (issueDate) assignment.issueDate = issueDate;
+    if (dueDate) assignment.dueDate = dueDate;
+    if (maxMarks !== undefined) assignment.maxMarks = Number(maxMarks);
+    if (Array.isArray(attachments)) assignment.attachments = attachments;
+
+    await assignment.save();
+
+    await dbManager.logActivity({
+      databaseName: req.databaseName,
+      institutionName: req.user.institutionName,
+      actorName: req.user.fullName,
+      actorRole: req.user.role,
+      actionCategory: 'ASSIGNMENT',
+      description: `Updated assignment "${assignment.title}"`,
+    });
+
+    const asgnObj = assignment.toObject ? assignment.toObject() : { ...assignment };
+    asgnObj.id = assignment._id ? assignment._id.toString() : assignment.id;
+
+    res.json({ success: true, assignment: asgnObj });
+  } catch (err) {
+    res.status(500).json({ error: 'UpdateAssignmentError', message: err.message });
   }
 });
 

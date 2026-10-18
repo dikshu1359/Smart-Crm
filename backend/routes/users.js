@@ -9,20 +9,48 @@ router.use(tenantAuth);
 /**
  * GET /api/users
  * Returns users in the active institution tenant. Filterable by role.
+ * Enforces role-based data privacy rules:
+ * - Admin: full view of all tenant users
+ * - Teacher: view assigned students (with sensitive fields redacted) and colleagues
+ * - Student: view own profile or minimal public directory
  */
 router.get('/', async (req, res) => {
   try {
     const { role } = req.query;
+    const currentRole = req.user?.role || 'admin';
+    const currentUserId = req.user?.id;
     const query = {};
     if (role) {
       query.role = role;
     }
 
+    // Role-based visibility
+    if (currentRole === 'student' && currentUserId && currentUserId !== 'system') {
+      if (role === 'student') {
+        // Students can only query their own student record
+        query._id = currentUserId;
+      }
+    }
+
     const users = await req.tenantDb.User.find(query).select('-passwordHash').sort({ createdAt: -1 });
-    const formatted = users.map((u) => ({
-      ...u.toObject(),
-      id: u._id.toString(),
-    }));
+
+    const formatted = users.map((u) => {
+      const uObj = u.toObject ? u.toObject() : { ...u };
+      delete uObj.passwordHash;
+      uObj.id = u._id ? u._id.toString() : u.id;
+
+      // Privacy redactions for teachers viewing student records
+      if (currentRole === 'teacher' && uObj.role === 'student') {
+        delete uObj.casteCategory;
+        delete uObj.religion;
+        delete uObj.guardianContact;
+        delete uObj.fatherContact;
+        delete uObj.motherContact;
+      }
+
+      return uObj;
+    });
+
     res.json({ users: formatted, count: formatted.length });
   } catch (err) {
     res.status(500).json({ error: 'FetchUsersError', message: err.message });
@@ -31,7 +59,7 @@ router.get('/', async (req, res) => {
 
 /**
  * POST /api/users
- * Administrator creates a teacher or student account
+ * Administrator creates a teacher or student account with full profile attributes
  */
 router.post('/', authorizeRoles('admin'), async (req, res) => {
   try {
@@ -49,6 +77,26 @@ router.post('/', authorizeRoles('admin'), async (req, res) => {
       gradeLevel,
       guardianContact,
       assignedClassId,
+      // Extended Student Profile Fields
+      dateOfBirth,
+      gender,
+      residentialAddress,
+      religion,
+      casteCategory,
+      departmentBranch,
+      classDivision,
+      admissionId,
+      academicYear,
+      fatherName,
+      fatherContact,
+      motherName,
+      motherContact,
+      guardianInfo,
+      previousQualification,
+      previousInstitution,
+      previousExamDetails,
+      photoUrl,
+      signatureUrl,
     } = req.body;
 
     if (!username || !fullName || !email || !role) {
@@ -101,9 +149,29 @@ router.post('/', authorizeRoles('admin'), async (req, res) => {
       qualification: qualification || '',
       assignedClassIds: assignedClassIds || [],
       rollNumber: rollNumber || '',
-      gradeLevel: gradeLevel || '',
+      gradeLevel: (gradeLevel || '').trim(),
       guardianContact: guardianContact || '',
       assignedClassId: assignedClassId || '',
+      // Extended Profile Fields
+      dateOfBirth: dateOfBirth || '',
+      gender: gender || '',
+      residentialAddress: residentialAddress || '',
+      religion: religion || '',
+      casteCategory: casteCategory || '',
+      departmentBranch: departmentBranch || '',
+      classDivision: classDivision || '',
+      admissionId: admissionId || '',
+      academicYear: academicYear || '2025-2026',
+      fatherName: fatherName || '',
+      fatherContact: fatherContact || '',
+      motherName: motherName || '',
+      motherContact: motherContact || '',
+      guardianInfo: guardianInfo || '',
+      previousQualification: previousQualification || '',
+      previousInstitution: previousInstitution || '',
+      previousExamDetails: previousExamDetails || '',
+      photoUrl: photoUrl || '',
+      signatureUrl: signatureUrl || '',
       mustChangePassword: true,
       status: 'active',
     });
@@ -130,7 +198,7 @@ router.post('/', authorizeRoles('admin'), async (req, res) => {
       actorName: req.user?.fullName || 'Admin',
       actorRole: req.user?.role || 'admin',
       actionCategory: 'USER_MGMT',
-      description: `Created new ${role} account for ${user.fullName} (${user.username})`,
+      description: `Created new ${role} account for ${user.fullName} (${user.username}) with Grade Level: "${user.gradeLevel}"`,
     });
 
     const userObj = user.toObject();
@@ -140,7 +208,7 @@ router.post('/', authorizeRoles('admin'), async (req, res) => {
     res.status(201).json({
       success: true,
       user: userObj,
-      initialPassword, // Provided securely once upon creation for initial delivery
+      initialPassword,
     });
   } catch (err) {
     res.status(500).json({ error: 'CreateUserError', message: err.message });
@@ -149,12 +217,12 @@ router.post('/', authorizeRoles('admin'), async (req, res) => {
 
 /**
  * PUT /api/users/:id
- * Update user details
+ * Update user details & extended profile attributes
  */
 router.put('/:id', async (req, res) => {
   try {
     const { id } = req.params;
-    const isSelf = req.user.id === id;
+    const isSelf = req.user.id === id || req.user._id === id;
     const isAdmin = req.user.role === 'admin';
 
     if (!isSelf && !isAdmin) {
@@ -164,6 +232,7 @@ router.put('/:id', async (req, res) => {
     const updates = { ...req.body };
     delete updates.passwordHash; // Do not allow direct passwordHash manipulation
     delete updates.role; // Do not allow arbitrary role changes
+    delete updates.databaseName;
 
     if (updates.password) {
       updates.passwordHash = bcrypt.hashSync(updates.password, 10);
@@ -175,6 +244,15 @@ router.put('/:id', async (req, res) => {
     if (!updatedUser) {
       return res.status(404).json({ error: 'UserNotFound', message: 'User not found.' });
     }
+
+    await dbManager.logActivity({
+      databaseName: req.databaseName,
+      institutionName: req.user?.institutionName || '',
+      actorName: req.user?.fullName || 'User',
+      actorRole: req.user?.role || 'user',
+      actionCategory: 'USER_MGMT',
+      description: `Updated profile details for account ${updatedUser.fullName}`,
+    });
 
     res.json({ success: true, user: updatedUser });
   } catch (err) {
@@ -189,7 +267,7 @@ router.put('/:id', async (req, res) => {
 router.delete('/:id', authorizeRoles('admin'), async (req, res) => {
   try {
     const { id } = req.params;
-    if (req.user.id === id) {
+    if (req.user.id === id || req.user._id === id) {
       return res.status(400).json({ error: 'CannotDeleteSelf', message: 'Cannot delete your own administrator account.' });
     }
 

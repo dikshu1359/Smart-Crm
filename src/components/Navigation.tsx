@@ -19,6 +19,7 @@ import {
   Calendar as CalendarIcon,
   Table,
   FileSpreadsheet,
+  CheckCircle2,
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { DashboardTab, UserRole } from '../types/crm';
@@ -73,10 +74,22 @@ export const Navigation: React.FC<NavigationProps> = ({ mobileOpen, setMobileOpe
       roles: ['admin', 'teacher'],
     },
     {
+      id: 'attendance',
+      label: currentUser.role === 'student' ? 'My Attendance' : 'Student Attendance',
+      icon: CheckCircle2,
+      roles: ['teacher', 'student'],
+    },
+    {
+      id: 'student-data',
+      label: currentUser.role === 'student' ? 'My Student Profile' : 'Student Important Information',
+      icon: FileSpreadsheet,
+      roles: ['admin', 'teacher', 'student'],
+    },
+    {
       id: 'assignments',
       label: currentUser.role === 'student' ? 'My Assignments' : 'Assignment Management',
       icon: FileCheck2,
-      roles: ['admin', 'teacher', 'student'],
+      roles: ['teacher', 'student'],
     },
     {
       id: 'quizzes',
@@ -89,12 +102,6 @@ export const Navigation: React.FC<NavigationProps> = ({ mobileOpen, setMobileOpe
       label: currentUser.role === 'student' ? 'My Marks & Gradebook' : 'Marks Spreadsheet',
       icon: Table,
       roles: ['admin', 'teacher', 'student'],
-    },
-    {
-      id: 'roster',
-      label: 'Student Roster Import',
-      icon: FileSpreadsheet,
-      roles: ['admin', 'teacher'],
     },
     {
       id: 'schedule',

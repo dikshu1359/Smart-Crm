@@ -8,50 +8,92 @@ router.use(tenantAuth);
  * Generate a consistent conversation ID for two users in an institution
  */
 function getConversationId(userId1, userId2) {
-  return [userId1, userId2].sort().join('_');
+  return [String(userId1), String(userId2)].sort().join('_');
 }
 
 /**
  * GET /api/chat/contacts
  * Returns eligible contacts for current user based on institutional permissions:
+ * - Student: ONLY teachers who are actually assigned to teach that student
+ *            (via class primary teacher, teacher assignedClassIds, or schedule subjects).
+ *            ADMIN IS STRICTLY EXCLUDED for students.
+ * - Teacher: admins and students enrolled in teacher's assigned classes
  * - Admin: all teachers and students
- * - Teacher: admins and students in teacher's assigned classes
- * - Student: admins and teachers of student's assigned class
  */
 router.get('/contacts', async (req, res) => {
   try {
     const role = req.user?.role || 'admin';
-    const userId = req.user?.id;
-    let query = { status: 'active' };
-    if (userId && userId !== 'system') {
-      query._id = { $ne: userId };
-    }
+    const userId = req.user?.id || req.user?._id;
+
+    let contacts = [];
 
     if (role === 'admin') {
-      query.role = { $in: ['teacher', 'student'] };
+      // Admin sees teachers and students
+      contacts = await req.tenantDb.User.find({
+        _id: { $ne: userId },
+        status: 'active',
+        role: { $in: ['teacher', 'student'] },
+      }).select('fullName username role email specialization assignedClassId photoUrl');
     } else if (role === 'teacher' && userId && userId !== 'system') {
       const teacher = await req.tenantDb.User.findById(userId);
       const assignedClassIds = teacher?.assignedClassIds || [];
-      query = {
-        _id: { $ne: userId },
-        $or: [
-          { role: 'admin' },
-          { role: 'student', assignedClassId: { $in: assignedClassIds } },
-        ],
-      };
-    } else if (role === 'student' && userId && userId !== 'system') {
-      const student = await req.tenantDb.User.findById(userId);
-      const studentClassId = student?.assignedClassId;
-      query = {
-        _id: { $ne: userId },
-        $or: [
-          { role: 'admin' },
-          { role: 'teacher', assignedClassIds: studentClassId },
-        ],
-      };
-    }
 
-    const contacts = await req.tenantDb.User.find(query).select('fullName username role email specialization assignedClassId').lean();
+      // Also find classes where this teacher is primary
+      const primaryClasses = await req.tenantDb.Class.find({ primaryTeacherId: String(userId) });
+      const allClassesForTeacher = Array.from(
+        new Set([...assignedClassIds, ...primaryClasses.map((c) => c._id.toString())])
+      );
+
+      // Teachers see Admins and students from their assigned classes
+      contacts = await req.tenantDb.User.find({
+        _id: { $ne: userId },
+        status: 'active',
+        $or: [
+          { role: 'admin' },
+          { role: 'student', assignedClassId: { $in: allClassesForTeacher } },
+          { role: 'student', assignedClassIds: { $in: allClassesForTeacher } },
+        ],
+      }).select('fullName username role email specialization assignedClassId photoUrl');
+    } else if (role === 'student' && userId && userId !== 'system') {
+      // STUDENT PORTAL: STRICTLY ASSIGNED TEACHERS ONLY - NO ADMINS
+      const student = await req.tenantDb.User.findById(userId);
+      const studentClassId = student?.assignedClassId || (student?.assignedClassIds && student.assignedClassIds[0]);
+
+      if (studentClassId) {
+        // 1. Primary teacher of the class
+        const studentClass = await req.tenantDb.Class.findById(studentClassId).catch(() => null);
+        const primaryTeacherId = studentClass?.primaryTeacherId;
+
+        // 2. Teachers with this class in assignedClassIds
+        const classTeachers = await req.tenantDb.User.find({
+          role: 'teacher',
+          status: 'active',
+          $or: [{ assignedClassIds: studentClassId }, { assignedClassId: studentClassId }],
+        });
+
+        // 3. Teachers scheduled in timetable slots for this class
+        const scheduleSlots = await req.tenantDb.Schedule.find({ classId: studentClassId });
+        const scheduledTeacherIds = scheduleSlots.map((s) => String(s.teacherId)).filter(Boolean);
+
+        const eligibleTeacherIds = new Set([
+          ...(primaryTeacherId ? [String(primaryTeacherId)] : []),
+          ...classTeachers.map((t) => String(t._id || t.id)),
+          ...scheduledTeacherIds,
+        ]);
+
+        if (eligibleTeacherIds.size > 0) {
+          contacts = await req.tenantDb.User.find({
+            _id: { $in: Array.from(eligibleTeacherIds) },
+            role: 'teacher',
+            status: 'active',
+          }).select('fullName username role email specialization assignedClassId photoUrl');
+        } else {
+          contacts = [];
+        }
+      } else {
+        contacts = [];
+      }
+    }
 
     // Get unread counts per contact
     let unreadMessages = [];
@@ -63,14 +105,17 @@ router.get('/contacts', async (req, res) => {
     }
 
     const contactsWithUnread = contacts.map((c) => {
-      const unreadCount = unreadMessages.filter((m) => m.senderId === c._id.toString()).length;
+      const cId = c._id ? c._id.toString() : c.id;
+      const unreadCount = unreadMessages.filter((m) => m.senderId === cId).length;
       return {
-        id: c._id.toString(),
+        id: cId,
         fullName: c.fullName,
         username: c.username,
         role: c.role,
         email: c.email,
         unreadCount,
+        photoUrl: c.photoUrl || '',
+        specialization: c.specialization || '',
       };
     });
 
@@ -95,9 +140,15 @@ router.get('/messages/:recipientId', async (req, res) => {
     await req.tenantDb.Message.updateMany(
       { conversationId, recipientId: req.user.id, read: false },
       { read: true }
-    );
+    ).catch(() => {});
 
-    res.json({ messages });
+    const formatted = messages.map((m) => {
+      const mObj = m.toObject ? m.toObject() : { ...m };
+      mObj.id = m._id ? m._id.toString() : m.id;
+      return mObj;
+    });
+
+    res.json({ messages: formatted });
   } catch (err) {
     res.status(500).json({ error: 'FetchMessagesError', message: err.message });
   }
@@ -105,18 +156,46 @@ router.get('/messages/:recipientId', async (req, res) => {
 
 /**
  * POST /api/chat/messages
- * Send message to an authorized recipient
+ * Send message with text and/or file attachments (images, PDFs)
  */
 router.post('/messages', async (req, res) => {
   try {
-    const { recipientId, text } = req.body;
-    if (!recipientId || !text?.trim()) {
-      return res.status(400).json({ error: 'MissingFields', message: 'Recipient and message text are required.' });
+    const { recipientId, text, attachments } = req.body;
+    const hasText = Boolean(text && text.trim());
+    const hasAttachments = Array.isArray(attachments) && attachments.length > 0;
+
+    if (!recipientId || (!hasText && !hasAttachments)) {
+      return res.status(400).json({
+        error: 'MissingFields',
+        message: 'Recipient and message content (text or file attachment) are required.',
+      });
     }
 
     const recipient = await req.tenantDb.User.findById(recipientId);
     if (!recipient) {
       return res.status(404).json({ error: 'RecipientNotFound', message: 'Recipient user not found.' });
+    }
+
+    // Role-based authorization for students: cannot message Admin
+    if (req.user?.role === 'student' && recipient.role === 'admin') {
+      return res.status(403).json({
+        error: 'ForbiddenRecipient',
+        message: 'Students may only send messages to their assigned faculty teachers.',
+      });
+    }
+
+    // Validate attachments if provided
+    let safeAttachments = [];
+    if (hasAttachments) {
+      safeAttachments = attachments.map((att, idx) => ({
+        id: att.id || `chat-att-${Date.now()}-${idx}`,
+        name: att.name || 'document',
+        size: att.size || '0 KB',
+        mimeType: att.mimeType || 'application/octet-stream',
+        contentPreview: att.contentPreview || att.name || 'Attachment',
+        dataUrl: att.dataUrl || '',
+        uploadedAt: new Date().toISOString(),
+      }));
     }
 
     const conversationId = getConversationId(req.user.id, recipientId);
@@ -129,11 +208,16 @@ router.post('/messages', async (req, res) => {
       recipientId,
       recipientName: recipient.fullName,
       recipientRole: recipient.role,
-      text: text.trim(),
+      text: (text || '').trim(),
+      attachments: safeAttachments,
       read: false,
+      createdAt: new Date(),
     });
 
-    res.status(201).json({ success: true, message });
+    const msgObj = message.toObject ? message.toObject() : { ...message };
+    msgObj.id = message._id ? message._id.toString() : message.id;
+
+    res.status(201).json({ success: true, message: msgObj });
   } catch (err) {
     res.status(500).json({ error: 'SendMessageError', message: err.message });
   }

@@ -190,6 +190,15 @@ export const api = {
     return res.json();
   },
 
+  async updateAssignment(databaseName: string, assignmentId: string, payload: any) {
+    const res = await fetch(`${BASE_URL}/assignments/${assignmentId}`, {
+      method: 'PUT',
+      headers: getAuthHeaders(databaseName),
+      body: JSON.stringify(payload),
+    });
+    return res.json();
+  },
+
   async deleteAssignment(databaseName: string, assignmentId: string) {
     const res = await fetch(`${BASE_URL}/assignments/${assignmentId}`, {
       method: 'DELETE',
@@ -248,11 +257,11 @@ export const api = {
     return res.json();
   },
 
-  async sendChatMessage(databaseName: string, recipientId: string, text: string) {
+  async sendChatMessage(databaseName: string, recipientId: string, text: string, attachments?: any[]) {
     const res = await fetch(`${BASE_URL}/chat/messages`, {
       method: 'POST',
       headers: getAuthHeaders(databaseName),
-      body: JSON.stringify({ recipientId, text }),
+      body: JSON.stringify({ recipientId, text, attachments }),
     });
     return res.json();
   },
@@ -272,6 +281,15 @@ export const api = {
   async addScheduleSlot(databaseName: string, slotPayload: any) {
     const res = await fetch(`${BASE_URL}/schedule`, {
       method: 'POST',
+      headers: getAuthHeaders(databaseName),
+      body: JSON.stringify(slotPayload),
+    });
+    return res.json();
+  },
+
+  async updateScheduleSlot(databaseName: string, slotId: string, slotPayload: any) {
+    const res = await fetch(`${BASE_URL}/schedule/${slotId}`, {
+      method: 'PUT',
       headers: getAuthHeaders(databaseName),
       body: JSON.stringify(slotPayload),
     });

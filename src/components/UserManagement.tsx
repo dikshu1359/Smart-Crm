@@ -39,7 +39,11 @@ export const UserManagement: React.FC = () => {
   const [specialization, setSpecialization] = useState('');
   const [qualification, setQualification] = useState('');
   const [rollNumber, setRollNumber] = useState('');
-  const [gradeLevel, setGradeLevel] = useState('Grade 11');
+  const [gradeLevel, setGradeLevel] = useState('First Year');
+  const [departmentBranch, setDepartmentBranch] = useState('Computer Engineering');
+  const [classDivision, setClassDivision] = useState('Section A');
+  const [admissionId, setAdmissionId] = useState('');
+  const [academicYear, setAcademicYear] = useState('2025-2026');
   const [assignedClassId, setAssignedClassId] = useState('');
   const [assignedClassIds, setAssignedClassIds] = useState<string[]>([]);
 
@@ -71,7 +75,11 @@ export const UserManagement: React.FC = () => {
     setSpecialization('');
     setQualification('');
     setRollNumber('');
-    setGradeLevel('Grade 11');
+    setGradeLevel('First Year');
+    setDepartmentBranch('Computer Engineering');
+    setClassDivision('Section A');
+    setAdmissionId(`ADM-${Date.now().toString().slice(-4)}`);
+    setAcademicYear('2025-2026');
     setAssignedClassId('');
     setAssignedClassIds([]);
     setFormError('');
@@ -111,6 +119,10 @@ export const UserManagement: React.FC = () => {
     } else {
       payload.rollNumber = rollNumber.trim() || `STU-${Date.now().toString().slice(-4)}`;
       payload.gradeLevel = gradeLevel.trim();
+      payload.departmentBranch = departmentBranch.trim();
+      payload.classDivision = classDivision.trim();
+      payload.admissionId = admissionId.trim();
+      payload.academicYear = academicYear.trim();
       payload.assignedClassId = assignedClassId;
     }
 
@@ -468,41 +480,98 @@ export const UserManagement: React.FC = () => {
                   </div>
                 </div>
               ) : (
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 p-3.5 rounded-2xl bg-white/[0.02] border border-white/10">
-                  <div>
-                    <label className="block text-[11px] font-semibold text-slate-300 mb-1">Roll / Student ID</label>
-                    <input
-                      type="text"
-                      placeholder="e.g. STU-2026-01"
-                      value={rollNumber}
-                      onChange={(e) => setRollNumber(e.target.value)}
-                      className="w-full px-3 py-1.5 text-xs bg-black/40 border border-white/15 rounded-xl text-white font-mono"
-                    />
+                <div className="space-y-3 p-3.5 rounded-2xl bg-white/[0.02] border border-white/10">
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    <div>
+                      <label className="block text-[11px] font-semibold text-slate-300 mb-1">Roll / Student ID *</label>
+                      <input
+                        type="text"
+                        placeholder="e.g. CS-101"
+                        value={rollNumber}
+                        onChange={(e) => setRollNumber(e.target.value)}
+                        className="w-full px-3 py-1.5 text-xs bg-black/40 border border-white/15 rounded-xl text-white font-mono"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[11px] font-semibold text-slate-300 mb-1">
+                        Grade Level (Manual Entry) *
+                      </label>
+                      <input
+                        type="text"
+                        list="grade-level-presets"
+                        placeholder="e.g. First Year, TY Computer Engineering"
+                        value={gradeLevel}
+                        onChange={(e) => setGradeLevel(e.target.value)}
+                        className="w-full px-3 py-1.5 text-xs bg-black/40 border border-purple-500/40 rounded-xl text-white focus:outline-none focus:border-purple-400"
+                      />
+                      <datalist id="grade-level-presets">
+                        <option value="First Year" />
+                        <option value="Second Year" />
+                        <option value="Third Year" />
+                        <option value="Final Year" />
+                        <option value="FY Computer Engineering" />
+                        <option value="SY Computer Engineering" />
+                        <option value="TY Computer Engineering" />
+                        <option value="Grade 11" />
+                        <option value="Grade 12" />
+                      </datalist>
+                    </div>
+                    <div>
+                      <label className="block text-[11px] font-semibold text-slate-300 mb-1">Department / Branch</label>
+                      <input
+                        type="text"
+                        list="department-presets"
+                        placeholder="e.g. Computer Engineering"
+                        value={departmentBranch}
+                        onChange={(e) => setDepartmentBranch(e.target.value)}
+                        className="w-full px-3 py-1.5 text-xs bg-black/40 border border-white/15 rounded-xl text-white"
+                      />
+                      <datalist id="department-presets">
+                        <option value="Computer Engineering" />
+                        <option value="Information Technology" />
+                        <option value="Electronics & Telecommunication" />
+                        <option value="Mechanical Engineering" />
+                        <option value="Civil Engineering" />
+                      </datalist>
+                    </div>
                   </div>
-                  <div>
-                    <label className="block text-[11px] font-semibold text-slate-300 mb-1">Grade Level</label>
-                    <input
-                      type="text"
-                      placeholder="e.g. Grade 11"
-                      value={gradeLevel}
-                      onChange={(e) => setGradeLevel(e.target.value)}
-                      className="w-full px-3 py-1.5 text-xs bg-black/40 border border-white/15 rounded-xl text-white"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-[11px] font-semibold text-slate-300 mb-1">Assign Class</label>
-                    <select
-                      value={assignedClassId}
-                      onChange={(e) => setAssignedClassId(e.target.value)}
-                      className="w-full px-2.5 py-1.5 text-xs bg-black/40 border border-white/15 rounded-xl text-white"
-                    >
-                      <option value="">-- No class allotted --</option>
-                      {classes.map((cls) => (
-                        <option key={cls.id} value={cls.id}>
-                          {cls.name}
-                        </option>
-                      ))}
-                    </select>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    <div>
+                      <label className="block text-[11px] font-semibold text-slate-300 mb-1">Class / Division</label>
+                      <input
+                        type="text"
+                        placeholder="e.g. Section A"
+                        value={classDivision}
+                        onChange={(e) => setClassDivision(e.target.value)}
+                        className="w-full px-3 py-1.5 text-xs bg-black/40 border border-white/15 rounded-xl text-white"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[11px] font-semibold text-slate-300 mb-1">Admission ID</label>
+                      <input
+                        type="text"
+                        placeholder="e.g. ADM-2025-010"
+                        value={admissionId}
+                        onChange={(e) => setAdmissionId(e.target.value)}
+                        className="w-full px-3 py-1.5 text-xs bg-black/40 border border-white/15 rounded-xl text-white font-mono"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[11px] font-semibold text-slate-300 mb-1">Assign Class (Allotment)</label>
+                      <select
+                        value={assignedClassId}
+                        onChange={(e) => setAssignedClassId(e.target.value)}
+                        className="w-full px-2.5 py-1.5 text-xs bg-black/40 border border-white/15 rounded-xl text-white"
+                      >
+                        <option value="">-- No class allotted --</option>
+                        {classes.map((cls) => (
+                          <option key={cls.id} value={cls.id}>
+                            {cls.name}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
                   </div>
                 </div>
               )}

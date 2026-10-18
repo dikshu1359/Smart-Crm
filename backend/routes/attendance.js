@@ -12,32 +12,49 @@ router.use(tenantAuth);
 router.get('/', async (req, res) => {
   try {
     const role = req.user?.role || 'admin';
-    const userId = req.user?.id;
+    const userId = req.user?.id || req.user?._id;
     const { classId, date, month } = req.query;
 
     let query = {};
-    if (classId) query.classId = classId;
+    if (classId) query.classId = String(classId);
     if (date) query.date = date;
     if (month) query.date = { $regex: `^${month}` };
 
     if (role === 'student' && userId && userId !== 'system') {
       const student = await req.tenantDb.User.findById(userId);
-      if (student?.assignedClassId) {
-        query.classId = student.assignedClassId;
+      const studentClassId = student?.assignedClassId || (student?.assignedClassIds && student.assignedClassIds[0]);
+      if (studentClassId) {
+        query.classId = String(studentClassId);
       }
     } else if (role === 'teacher' && userId && userId !== 'system') {
       const teacher = await req.tenantDb.User.findById(userId);
       const assigned = teacher?.assignedClassIds || [];
-      if (assigned.length > 0 && !classId) {
-        query.classId = { $in: assigned };
+      const primaryClasses = await req.tenantDb.Class.find({ primaryTeacherId: String(userId) });
+      const teacherClassIds = Array.from(new Set([...assigned, ...primaryClasses.map((c) => c._id.toString())]));
+
+      if (teacherClassIds.length > 0 && !classId) {
+        query.classId = { $in: teacherClassIds };
       }
     }
 
     const sessions = await req.tenantDb.Attendance.find(query).sort({ date: -1 });
-    const formatted = sessions.map((s) => ({
-      ...s.toObject(),
-      id: s._id.toString(),
-    }));
+    const allClasses = await req.tenantDb.Class.find();
+    const classMap = new Map(allClasses.map((c) => [c._id ? c._id.toString() : c.id, c.name]));
+
+    const formatted = sessions.map((s) => {
+      const sObj = s.toObject ? s.toObject() : { ...s };
+      sObj.id = s._id ? s._id.toString() : s.id;
+      sObj.className = classMap.get(String(s.classId)) || `Class ${s.classId}`;
+
+      // If student requested, enrich with student's personal status
+      if (role === 'student' && userId) {
+        const studentRecord = (s.records || []).find((r) => String(r.studentId) === String(userId));
+        sObj.personalStatus = studentRecord ? studentRecord.status : 'unmarked';
+        sObj.personalRemarks = studentRecord ? studentRecord.remarks : '';
+      }
+
+      return sObj;
+    });
 
     res.json({ attendance: formatted, count: formatted.length });
   } catch (err) {
@@ -52,7 +69,7 @@ router.get('/', async (req, res) => {
 router.get('/summary', async (req, res) => {
   try {
     const role = req.user?.role || 'admin';
-    const userId = req.user?.id;
+    const userId = req.user?.id || req.user?._id;
 
     const [allClasses, allStudents, allSessions] = await Promise.all([
       req.tenantDb.Class.find(),
@@ -64,16 +81,16 @@ router.get('/summary', async (req, res) => {
     let targetStudents = allStudents;
 
     if (role === 'student' && userId && userId !== 'system') {
-      const student = allStudents.find((s) => s._id.toString() === userId);
-      const studentClassId = student?.assignedClassId;
-      targetSessions = allSessions.filter((s) => s.classId === studentClassId);
-      targetStudents = allStudents.filter((s) => s._id.toString() === userId);
+      const student = allStudents.find((s) => (s._id ? s._id.toString() : s.id) === String(userId));
+      const studentClassId = student?.assignedClassId || (student?.assignedClassIds && student.assignedClassIds[0]);
+      targetSessions = allSessions.filter((s) => String(s.classId) === String(studentClassId));
+      targetStudents = allStudents.filter((s) => (s._id ? s._id.toString() : s.id) === String(userId));
     } else if (role === 'teacher' && userId && userId !== 'system') {
       const teacher = await req.tenantDb.User.findById(userId);
       const teacherClassIds = teacher?.assignedClassIds || [];
       if (teacherClassIds.length > 0) {
-        targetSessions = allSessions.filter((s) => teacherClassIds.includes(s.classId));
-        targetStudents = allStudents.filter((s) => teacherClassIds.includes(s.assignedClassId));
+        targetSessions = allSessions.filter((s) => teacherClassIds.includes(String(s.classId)));
+        targetStudents = allStudents.filter((s) => teacherClassIds.includes(String(s.assignedClassId)));
       }
     }
 
@@ -83,9 +100,11 @@ router.get('/summary', async (req, res) => {
     let totalAbsentCount = 0;
 
     targetSessions.forEach((s) => {
-      totalRecordsCount += s.records.length;
-      totalPresentCount += s.records.filter((r) => r.status === 'present').length;
-      totalAbsentCount += s.records.filter((r) => r.status === 'absent').length;
+      if (Array.isArray(s.records)) {
+        totalRecordsCount += s.records.length;
+        totalPresentCount += s.records.filter((r) => r.status === 'present').length;
+        totalAbsentCount += s.records.filter((r) => r.status === 'absent').length;
+      }
     });
 
     const overallRate = totalRecordsCount > 0 ? Math.round((totalPresentCount / totalRecordsCount) * 100) : 100;
@@ -93,8 +112,9 @@ router.get('/summary', async (req, res) => {
     // Student individual attendance rates
     const studentAttendanceMap = new Map();
     targetStudents.forEach((st) => {
-      studentAttendanceMap.set(st._id.toString(), {
-        studentId: st._id.toString(),
+      const stId = st._id ? st._id.toString() : st.id;
+      studentAttendanceMap.set(stId, {
+        studentId: stId,
         studentName: st.fullName,
         rollNumber: st.rollNumber || 'N/A',
         classId: st.assignedClassId || '',
@@ -105,14 +125,16 @@ router.get('/summary', async (req, res) => {
     });
 
     targetSessions.forEach((session) => {
-      session.records.forEach((r) => {
-        const entry = studentAttendanceMap.get(r.studentId);
-        if (entry) {
-          entry.totalClasses += 1;
-          if (r.status === 'present') entry.presentCount += 1;
-          else if (r.status === 'absent') entry.absentCount += 1;
-        }
-      });
+      if (Array.isArray(session.records)) {
+        session.records.forEach((r) => {
+          const entry = studentAttendanceMap.get(String(r.studentId));
+          if (entry) {
+            entry.totalClasses += 1;
+            if (r.status === 'present') entry.presentCount += 1;
+            else if (r.status === 'absent') entry.absentCount += 1;
+          }
+        });
+      }
     });
 
     const studentSummary = Array.from(studentAttendanceMap.values()).map((s) => {
@@ -125,18 +147,19 @@ router.get('/summary', async (req, res) => {
     });
 
     // Class breakdown
-    const classMap = new Map(allClasses.map((c) => [c._id.toString(), c]));
+    const classMap = new Map(allClasses.map((c) => [c._id ? c._id.toString() : c.id, c]));
     const classSummary = allClasses.map((cls) => {
-      const classSessions = targetSessions.filter((s) => s.classId === cls._id.toString());
+      const cId = cls._id ? cls._id.toString() : cls.id;
+      const classSessions = targetSessions.filter((s) => String(s.classId) === cId);
       let cPresent = 0;
       let cTotal = 0;
       classSessions.forEach((s) => {
-        cPresent += s.presentCount;
-        cTotal += s.totalStudents;
+        cPresent += s.presentCount || 0;
+        cTotal += s.totalStudents || 0;
       });
       const pct = cTotal > 0 ? Math.round((cPresent / cTotal) * 100) : 100;
       return {
-        classId: cls._id.toString(),
+        classId: cId,
         className: `${cls.name} (${cls.gradeLevel} - ${cls.section})`,
         totalSessions: classSessions.length,
         studentCount: cls.studentIds?.length || 0,
@@ -157,11 +180,16 @@ router.get('/summary', async (req, res) => {
       classSummary,
       studentSummary,
       lowAttendanceStudents,
-      recentSessions: targetSessions.slice(0, 10).map((s) => ({
-        ...s.toObject(),
-        id: s._id.toString(),
-        className: classMap.get(s.classId)?.name || 'Class ' + s.classId,
-      })),
+      recentSessions: targetSessions.slice(0, 10).map((s) => {
+        const sObj = s.toObject ? s.toObject() : { ...s };
+        const sId = s._id ? s._id.toString() : s.id;
+        const cls = classMap.get(String(s.classId));
+        return {
+          ...sObj,
+          id: sId,
+          className: cls ? cls.name : 'Class ' + s.classId,
+        };
+      }),
     });
   } catch (err) {
     res.status(500).json({ error: 'AttendanceSummaryError', message: err.message });
@@ -170,7 +198,8 @@ router.get('/summary', async (req, res) => {
 
 /**
  * POST /api/attendance
- * Admin or Teacher marks or updates attendance for a class on a given date
+ * Teacher marks or updates attendance for a class on a given date.
+ * Enforces duplicate prevention: updates existing session for same class & date.
  */
 router.post('/', authorizeRoles('admin', 'teacher'), async (req, res) => {
   try {
@@ -183,10 +212,20 @@ router.post('/', authorizeRoles('admin', 'teacher'), async (req, res) => {
       });
     }
 
+    // Validate that no records are unmarked
+    const unmarkedRecords = records.filter((r) => !r.status || (r.status !== 'present' && r.status !== 'absent'));
+    if (unmarkedRecords.length > 0) {
+      return res.status(400).json({
+        error: 'IncompleteAttendance',
+        message: `Validation Error: ${unmarkedRecords.length} student(s) remain unmarked. Please mark all students Present or Absent before saving.`,
+      });
+    }
+
     const presentCount = records.filter((r) => r.status === 'present').length;
     const absentCount = records.filter((r) => r.status === 'absent').length;
 
-    const existingSession = await req.tenantDb.Attendance.findOne({ classId, date });
+    // Duplicate check & upsert for the same class and date
+    const existingSession = await req.tenantDb.Attendance.findOne({ classId: String(classId), date });
 
     let savedSession;
     if (existingSession) {
@@ -194,42 +233,37 @@ router.post('/', authorizeRoles('admin', 'teacher'), async (req, res) => {
       existingSession.totalStudents = records.length;
       existingSession.presentCount = presentCount;
       existingSession.absentCount = absentCount;
-      existingSession.markedByTeacherId = req.user?.id || 'admin';
-      existingSession.markedByTeacherName = req.user?.fullName || 'Administrator';
+      existingSession.markedByTeacherId = req.user?.id || req.user?._id || 'teacher';
+      existingSession.markedByTeacherName = req.user?.fullName || 'Faculty Instructor';
+      existingSession.updatedAt = new Date();
       savedSession = await existingSession.save();
     } else {
       savedSession = await req.tenantDb.Attendance.create({
-        classId,
+        classId: String(classId),
         date,
-        markedByTeacherId: req.user?.id || 'admin',
-        markedByTeacherName: req.user?.fullName || 'Administrator',
+        markedByTeacherId: req.user?.id || req.user?._id || 'teacher',
+        markedByTeacherName: req.user?.fullName || 'Faculty Instructor',
         records,
         totalStudents: records.length,
         presentCount,
         absentCount,
+        createdAt: new Date(),
       });
     }
 
-    let targetClass = null;
-    if (classId) {
-      if (classId.match(/^[0-9a-fA-F]{24}$/)) {
-        targetClass = await req.tenantDb.Class.findById(classId).catch(() => null);
-      } else {
-        targetClass = await req.tenantDb.Class.findOne({ id: classId }).catch(() => null);
-      }
-    }
+    const targetClass = await req.tenantDb.Class.findById(classId).catch(() => null);
 
     await dbManager.logActivity({
       databaseName: req.databaseName,
       institutionName: req.user?.institutionName || '',
-      actorName: req.user?.fullName || 'Admin',
-      actorRole: req.user?.role || 'admin',
+      actorName: req.user?.fullName || 'Teacher',
+      actorRole: req.user?.role || 'teacher',
       actionCategory: 'ATTENDANCE',
-      description: `Recorded attendance for class "${targetClass?.name || classId}" on ${date}: ${presentCount} present, ${absentCount} absent`,
+      description: `Saved attendance for "${targetClass?.name || classId}" on ${date}: ${presentCount} Present, ${absentCount} Absent`,
     });
 
-    const resObj = savedSession.toObject();
-    resObj.id = savedSession._id.toString();
+    const resObj = savedSession.toObject ? savedSession.toObject() : { ...savedSession };
+    resObj.id = savedSession._id ? savedSession._id.toString() : savedSession.id;
 
     res.status(201).json({ success: true, attendance: resObj });
   } catch (err) {
