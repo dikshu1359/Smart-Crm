@@ -35,16 +35,15 @@ async function startServer() {
       next();
     });
 
-    const isHmrDisabled = process.env.DISABLE_HMR === 'true';
+    const isCloudEnv = Boolean(process.env.K_SERVICE || process.env.AIS_APPLET_ID);
 
     const vite = await createViteServer({
       server: {
         middlewareMode: true,
-        hmr: isHmrDisabled
-          ? false
-          : {
-              server: httpServer,
-            },
+        hmr: {
+          server: httpServer,
+          clientPort: isCloudEnv ? 443 : 3000,
+        },
       },
       appType: 'spa',
     });

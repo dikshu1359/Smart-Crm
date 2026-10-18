@@ -86,7 +86,7 @@ router.get('/', async (req, res) => {
  * POST /api/quizzes
  * Teacher or Admin creates a new quiz
  */
-router.post('/', authorizeRoles('admin', 'teacher'), async (req, res) => {
+router.post('/', authorizeRoles('teacher'), async (req, res) => {
   try {
     const { title, subject, description, targetClassIds, durationMinutes, questions, isPublished } = req.body;
 
@@ -238,7 +238,7 @@ router.post('/:id/submit', authorizeRoles('student'), async (req, res) => {
  * PUT /api/quizzes/:id/publish
  * Teacher or Admin toggles quiz published state
  */
-router.put('/:id/publish', authorizeRoles('admin', 'teacher'), async (req, res) => {
+router.put('/:id/publish', authorizeRoles('teacher'), async (req, res) => {
   try {
     const { id } = req.params;
     const { isPublished } = req.body;

@@ -3,27 +3,25 @@ import react from '@vitejs/plugin-react';
 import path from 'path';
 import { defineConfig } from 'vite';
 
+const isCloudEnv = Boolean(process.env.K_SERVICE || process.env.AIS_APPLET_ID);
+
 export default defineConfig(() => {
   return {
     plugins: [react(), tailwindcss()],
     resolve: {
       alias: {
-        '@': path.resolve(__dirname, '.'),
+        '@': path.resolve(import.meta.dirname || process.cwd(), '.'),
       },
     },
     server: {
       port: 3000,
       host: '0.0.0.0',
       allowedHosts: true as const,
-      proxy: {
-        '/api': {
-          target: 'http://127.0.0.1:5001',
-          changeOrigin: true,
-        },
+      // Configure clientPort: 443 for Cloud Run / preview environments where SSL terminates at 443,
+      // avoiding WebSocket closed without opened when client defaults to port 24678/3000.
+      hmr: {
+        clientPort: isCloudEnv ? 443 : 3000,
       },
-      // HMR is disabled in AI Studio via DISABLE_HMR env var.
-      hmr: process.env.DISABLE_HMR !== 'true',
-      watch: process.env.DISABLE_HMR === 'true' ? null : {},
     },
   };
 });

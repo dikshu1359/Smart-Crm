@@ -500,6 +500,26 @@ export const api = {
     return res.json();
   },
 
+  async getTeacherAttendance(databaseName: string, date?: string) {
+    const url = date ? `${BASE_URL}/attendance/teachers?date=${encodeURIComponent(date)}` : `${BASE_URL}/attendance/teachers`;
+    const res = await fetch(url, {
+      headers: getAuthHeaders(databaseName),
+    });
+    return res.json();
+  },
+
+  async saveTeacherAttendance(
+    databaseName: string,
+    payload: { teacherId: string; date: string; status: string; checkInTime?: string; notes?: string }
+  ) {
+    const res = await fetch(`${BASE_URL}/attendance/teachers`, {
+      method: 'POST',
+      headers: getAuthHeaders(databaseName),
+      body: JSON.stringify(payload),
+    });
+    return res.json();
+  },
+
   // Marks & Gradebook Spreadsheet
   async getMarks(
     databaseName: string,

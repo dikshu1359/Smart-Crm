@@ -898,6 +898,31 @@ function seedDemoData(masterDb, tenantDatabases) {
     absentCount: 1,
   });
 
+  // Teacher Attendance Logs
+  vcet.TeacherAttendance.create({
+    teacherId: teacherId1,
+    teacherName: 'Dr. Anita Desai',
+    email: 'anita.desai@vcet.edu',
+    department: 'Computer Engineering',
+    date: '2026-10-16',
+    status: 'present',
+    checkInTime: '08:45 AM',
+    notes: 'Present - Conducted OS Practical Session in Lab 304',
+    recordedBy: 'system',
+  });
+
+  vcet.TeacherAttendance.create({
+    teacherId: teacherId2,
+    teacherName: 'Prof. Rakesh Kumar',
+    email: 'rakesh.kumar@vcet.edu',
+    department: 'Computer Engineering',
+    date: '2026-10-16',
+    status: 'absent',
+    checkInTime: null,
+    notes: 'Approved Medical Leave for Conference Presentation',
+    recordedBy: 'admin',
+  });
+
   // Marks
   vcet.Marks.create({
     classId: classId1,
@@ -993,6 +1018,7 @@ function createTenantModels(databaseName) {
     ActivityLog: new InMemoryCollection(`${databaseName}_activitylogs`),
     CalendarEvent: new InMemoryCollection(`${databaseName}_calendarevents`),
     Attendance: new InMemoryCollection(`${databaseName}_attendance`),
+    TeacherAttendance: new InMemoryCollection(`${databaseName}_teacherattendance`),
     Marks: new InMemoryCollection(`${databaseName}_marks`),
     StudentNote: new InMemoryCollection(`${databaseName}_studentnotes`),
   };

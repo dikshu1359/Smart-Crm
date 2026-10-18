@@ -24,9 +24,24 @@ import {
   AuditLogConsole,
 } from './components/TenantAndAuditManager';
 import { ProfileView } from './components/ProfileView';
+import { DashboardAnimatedBackground } from './components/DashboardAnimatedBackground';
+import { PrintableDossier } from './components/PrintableDossier';
 
 const CRMWorkspaceShell: React.FC = () => {
-  const { currentView, selectedRole, isAuthenticated, currentUser, activeTab, loading } = useApp();
+  const {
+    currentView,
+    selectedRole,
+    isAuthenticated,
+    currentUser,
+    activeTenant,
+    activeTab,
+    loading,
+    printingUser,
+    classes,
+    attendanceSessions,
+    marks,
+    assignments,
+  } = useApp();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   if (loading) {
@@ -52,26 +67,47 @@ const CRMWorkspaceShell: React.FC = () => {
     return <RoleSelectionPage initialRole={selectedRole} />;
   }
 
+  // User to display in print mode: either explicitly printingUser or current student
+  const activePrintUser = printingUser || (currentUser.role === 'student' ? currentUser : null);
+
   return (
-    <div className="min-h-screen bg-[#0B0A14] text-slate-100 flex">
+    <div className="min-h-screen bg-[#0B0A14] text-slate-100 flex relative overflow-x-hidden">
+      {/* Background Animated Floating Shapes for Admin, Teacher, and Student Dashboards */}
+      <DashboardAnimatedBackground />
+
       <Navigation mobileOpen={mobileMenuOpen} setMobileOpen={setMobileMenuOpen} />
 
-      <div className="flex-1 flex flex-col min-w-0">
+      <div className="flex-1 flex flex-col min-w-0 relative z-10">
         <TopWorkspaceBar onOpenMobileMenu={() => setMobileMenuOpen(true)} />
 
         <main className="flex-1 p-6 lg:p-8 max-w-[1360px] w-full mx-auto">
           {activeTab === 'overview' && <DashboardOverview />}
           {activeTab === 'users' && (currentUser.role === 'admin' ? <UserManagement /> : <DashboardOverview />)}
           {activeTab === 'classes' && (currentUser.role !== 'student' ? <ClassManagement /> : <DashboardOverview />)}
-          {activeTab === 'attendance' && <StudentAttendance />}
+
+          {/* Student Attendance & Teacher Attendance Monitoring */}
+          {activeTab === 'attendance' && (
+            currentUser.role !== 'student' ? <StudentAttendance /> : <DashboardOverview />
+          )}
+
           {activeTab === 'student-data' && <StudentImportantInformation />}
-          {activeTab === 'assignments' &&
-            (currentUser.role === 'student' ? (
+
+          {/* Assignments: Teacher & Student only. Admin cannot access Assignment Management */}
+          {activeTab === 'assignments' && (
+            currentUser.role === 'student' ? (
               <StudentAssignments />
-            ) : (
+            ) : currentUser.role === 'teacher' ? (
               <TeacherAssignments />
-            ))}
-          {activeTab === 'quizzes' && <QuizManagement />}
+            ) : (
+              <DashboardOverview />
+            )
+          )}
+
+          {/* Quizzes: Teacher & Student only. Admin cannot access Quiz Management */}
+          {activeTab === 'quizzes' && (
+            currentUser.role !== 'admin' ? <QuizManagement /> : <DashboardOverview />
+          )}
+
           {activeTab === 'marks' && <MarksSpreadsheet />}
           {activeTab === 'roster' && (currentUser.role === 'admin' ? <StudentRosterImport /> : <TeacherStudentRoster />)}
           {activeTab === 'schedule' && <ScheduleManagement />}
@@ -84,6 +120,17 @@ const CRMWorkspaceShell: React.FC = () => {
           {activeTab === 'profile' && <ProfileView />}
         </main>
       </div>
+
+      {/* Official Printable Dossier (rendered exclusively in browser print dialog) */}
+      <PrintableDossier
+        user={activePrintUser}
+        institutionName={activeTenant?.institutionName || ''}
+        campusCode={activeTenant?.campusCode}
+        classes={classes}
+        attendanceSessions={attendanceSessions}
+        marks={marks}
+        assignments={assignments}
+      />
     </div>
   );
 };

@@ -77,7 +77,7 @@ router.get('/', async (req, res) => {
  * POST /api/assignments
  * Teacher creates an assignment targeting selected classes
  */
-router.post('/', authorizeRoles('admin', 'teacher'), async (req, res) => {
+router.post('/', authorizeRoles('teacher'), async (req, res) => {
   try {
     const { title, subject, description, targetClassIds, issueDate, dueDate, maxMarks, attachments } = req.body;
 
@@ -174,7 +174,7 @@ router.post('/', authorizeRoles('admin', 'teacher'), async (req, res) => {
  * PUT /api/assignments/:id
  * Teacher updates an assignment and its target classes
  */
-router.put('/:id', authorizeRoles('admin', 'teacher'), async (req, res) => {
+router.put('/:id', authorizeRoles('teacher'), async (req, res) => {
   try {
     const { id } = req.params;
     const { title, subject, description, targetClassIds, issueDate, dueDate, maxMarks, attachments } = req.body;
@@ -287,7 +287,7 @@ router.post('/:id/submit', authorizeRoles('student'), async (req, res) => {
  * PUT /api/assignments/:id/submissions/:studentId/review
  * Teacher accepts, rejects, reassigns, or grades a submission
  */
-router.put('/:id/submissions/:studentId/review', authorizeRoles('admin', 'teacher'), async (req, res) => {
+router.put('/:id/submissions/:studentId/review', authorizeRoles('teacher'), async (req, res) => {
   try {
     const { id, studentId } = req.params;
     const { action, marksObtained, feedback } = req.body;
@@ -348,7 +348,7 @@ router.put('/:id/submissions/:studentId/review', authorizeRoles('admin', 'teache
  * PUT /api/assignments/:id
  * Teacher or Admin updates an existing assignment details (title, subject, description, targetClassIds, dates, maxMarks, attachments)
  */
-router.put('/:id', authorizeRoles('admin', 'teacher'), async (req, res) => {
+router.put('/:id', authorizeRoles('teacher'), async (req, res) => {
   try {
     const { id } = req.params;
     const { title, subject, description, targetClassIds, issueDate, dueDate, maxMarks, attachments } = req.body;
@@ -392,7 +392,7 @@ router.put('/:id', authorizeRoles('admin', 'teacher'), async (req, res) => {
 /**
  * DELETE /api/assignments/:id
  */
-router.delete('/:id', authorizeRoles('admin', 'teacher'), async (req, res) => {
+router.delete('/:id', authorizeRoles('teacher'), async (req, res) => {
   try {
     const { id } = req.params;
     const assignment = await req.tenantDb.Assignment.findByIdAndDelete(id);

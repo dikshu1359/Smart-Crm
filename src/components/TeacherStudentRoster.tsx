@@ -37,6 +37,7 @@ export const TeacherStudentRoster: React.FC = () => {
     importClassRoster,
     activeTenant,
     setActiveTab,
+    printUserForm,
   } = useApp();
 
   if (!currentUser) return null;
@@ -308,10 +309,7 @@ export const TeacherStudentRoster: React.FC = () => {
 
   // Trigger Print Preview for an Authorized Student Record
   const handlePrintStudentForm = (student: TenantUser) => {
-    setPrintingStudent(student);
-    setTimeout(() => {
-      window.print();
-    }, 150);
+    printUserForm(student);
   };
 
   // Template Download for Teachers

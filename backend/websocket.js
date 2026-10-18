@@ -43,6 +43,7 @@ export function setupWebSocketServer(httpServer) {
         wss.handleUpgrade(request, socket, head, (ws) => {
           wss.emit('connection', ws, request);
         });
+        return;
       }
       // If pathname starts with /vite-hmr or other paths, let other handlers (like Vite) handle it
     } catch (err) {

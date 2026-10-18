@@ -639,15 +639,9 @@ export const DashboardOverview: React.FC = () => {
                 </div>
               </div>
 
-              <div className="pt-2 flex justify-end">
-                <button
-                  type="button"
-                  onClick={() => setActiveTab('attendance')}
-                  className="text-xs font-semibold text-purple-300 hover:text-white flex items-center gap-1"
-                >
-                  <span>View Attendance Register</span>
-                  <ArrowRight className="w-3.5 h-3.5" />
-                </button>
+              <div className="pt-2 flex justify-between items-center text-[10px] text-slate-500">
+                <span>Absences reduce attendance percentage</span>
+                <span className="italic">Records verified by faculty</span>
               </div>
             </div>
           </div>

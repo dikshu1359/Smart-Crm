@@ -114,6 +114,9 @@ interface AppContextValue {
   saveMarksBatch: (payload: any) => Promise<{ ok: boolean; message?: string; count?: number }>;
   publishMarks: (payload: { classId: string; subject?: string; assessmentTitle?: string; isPublished?: boolean }) => Promise<{ ok: boolean; message?: string; updatedCount?: number }>;
   importClassRoster: (classId: string, students: any[]) => Promise<{ ok: boolean; message?: string; importedCount?: number; createdCount?: number; updatedCount?: number }>;
+  printingUser: TenantUser | null;
+  setPrintingUser: (user: TenantUser | null) => void;
+  printUserForm: (user: TenantUser) => void;
 }
 
 const AppContext = createContext<AppContextValue | null>(null);
@@ -151,6 +154,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [attendanceSummary, setAttendanceSummary] = useState<any>(null);
   const [marks, setMarks] = useState<StudentMarksRecord[]>([]);
   const [selectedChatContactId, setSelectedChatContactId] = useState<string | null>(null);
+  const [printingUser, setPrintingUser] = useState<TenantUser | null>(null);
+
+  const printUserForm = useCallback((user: TenantUser) => {
+    setPrintingUser(user);
+    setTimeout(() => {
+      window.print();
+    }, 120);
+  }, []);
 
   const setCurrentView = (view: AppView) => {
     // Protected routes check: Cannot open dashboard if unauthenticated
@@ -823,6 +834,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         saveMarksBatch,
         publishMarks,
         importClassRoster,
+        printingUser,
+        setPrintingUser,
+        printUserForm,
       }}
     >
       {children}

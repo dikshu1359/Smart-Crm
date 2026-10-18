@@ -38,7 +38,6 @@ export const PerformanceAnalytics: React.FC = () => {
     analytics,
     attendanceSummary,
     attendanceSessions,
-    markAttendance,
   } = useApp();
 
   const [activeSubTab, setActiveSubTab] = useState<'overview' | 'students' | 'teachers' | 'attendance'>('overview');
@@ -47,14 +46,7 @@ export const PerformanceAnalytics: React.FC = () => {
   const [selectedClassFilter, setSelectedClassFilter] = useState('all');
   const [selectedStandingFilter, setSelectedStandingFilter] = useState('all');
   const [searchQuery, setSearchQuery] = useState('');
-
-  // Attendance Marking State
-  const [attendanceClassId, setAttendanceClassId] = useState(() => classes[0]?.id || (classes[0] as any)?._id || '');
-  const [attendanceDate, setAttendanceDate] = useState(() => new Date().toISOString().split('T')[0]);
-  const [attendanceRecords, setAttendanceRecords] = useState<{ [studentId: string]: 'present' | 'absent' }>({});
-  const [attendanceRemarks, setAttendanceRemarks] = useState<{ [studentId: string]: string }>({});
-  const [attendanceSaving, setAttendanceSaving] = useState(false);
-  const [attendanceSavedSuccess, setAttendanceSavedSuccess] = useState(false);
+  const [attendanceClassFilter, setAttendanceClassFilter] = useState('all');
 
   if (!activeTenant || !currentUser) return null;
 
@@ -79,73 +71,6 @@ export const PerformanceAnalytics: React.FC = () => {
     }
     return true;
   });
-
-  // Students belonging to attendance selected class
-  const classObj = classes.find((c) => (c.id || (c as any)._id) === attendanceClassId);
-  const classStudentIds = classObj?.studentIds || [];
-  const enrolledStudents = users.filter((u) => u.role === 'student' && classStudentIds.includes(u.id || (u as any)._id));
-
-  // Initialize or update attendance records when class/date changes
-  const handleLoadClassAttendance = (clsId: string, dt: string) => {
-    setAttendanceClassId(clsId);
-    setAttendanceDate(dt);
-    setAttendanceSavedSuccess(false);
-
-    // Check if session already recorded
-    const existing = attendanceSessions.find((s) => s.classId === clsId && s.date === dt);
-    const initialRecords: { [id: string]: 'present' | 'absent' } = {};
-    const initialRemarks: { [id: string]: string } = {};
-
-    const cls = classes.find((c) => (c.id || (c as any)._id) === clsId);
-    const stIds = cls?.studentIds || [];
-    const stList = users.filter((u) => u.role === 'student' && stIds.includes(u.id || (u as any)._id));
-
-    stList.forEach((st) => {
-      const sid = st.id || (st as any)._id;
-      if (existing) {
-        const rec = existing.records.find((r) => r.studentId === sid);
-        initialRecords[sid] = rec ? rec.status : 'present';
-        initialRemarks[sid] = rec?.remarks || '';
-      } else {
-        initialRecords[sid] = 'present';
-        initialRemarks[sid] = '';
-      }
-    });
-
-    setAttendanceRecords(initialRecords);
-    setAttendanceRemarks(initialRemarks);
-  };
-
-  const handleSaveAttendance = async () => {
-    if (!attendanceClassId || !attendanceDate) return;
-    setAttendanceSaving(true);
-    setAttendanceSavedSuccess(false);
-
-    const records = enrolledStudents.map((st) => {
-      const sid = st.id || (st as any)._id;
-      return {
-        studentId: sid,
-        studentName: st.fullName,
-        rollNumber: st.rollNumber || 'N/A',
-        status: attendanceRecords[sid] || 'present',
-        remarks: attendanceRemarks[sid] || '',
-      };
-    });
-
-    const res = await markAttendance({
-      classId: attendanceClassId,
-      date: attendanceDate,
-      records,
-    });
-
-    setAttendanceSaving(false);
-    if (res.ok) {
-      setAttendanceSavedSuccess(true);
-      setTimeout(() => setAttendanceSavedSuccess(false), 3000);
-    } else {
-      alert(res.message || 'Failed to save attendance');
-    }
-  };
 
   const COLORS = ['#A855F7', '#EC4899', '#3B82F6', '#10B981', '#F59E0B'];
 
@@ -468,141 +393,129 @@ export const PerformanceAnalytics: React.FC = () => {
       {/* SUBTAB: ATTENDANCE TRACKER & LOGGER */}
       {activeSubTab === 'attendance' && (
         <div className="space-y-6">
-          {/* Class & Date Selector */}
-          <div className="p-4 rounded-2xl bg-white/[0.03] border border-white/10 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-            <div className="flex flex-wrap items-center gap-3">
-              <div>
-                <label className="block text-[11px] font-semibold text-slate-400 mb-1">
-                  Select Class Cohort
-                </label>
-                <select
-                  value={attendanceClassId}
-                  onChange={(e) => handleLoadClassAttendance(e.target.value, attendanceDate)}
-                  className="px-3 py-1.5 rounded-xl bg-white/5 border border-white/10 text-xs text-slate-200 focus:outline-none focus:border-purple-500 cursor-pointer"
-                >
-                  {classes.map((c) => (
-                    <option key={c.id || (c as any)._id} value={c.id || (c as any)._id} className="bg-[#141124]">
-                      {c.name} ({c.gradeLevel} - {c.section})
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-[11px] font-semibold text-slate-400 mb-1">
-                  Attendance Date
-                </label>
-                <input
-                  type="date"
-                  value={attendanceDate}
-                  onChange={(e) => handleLoadClassAttendance(attendanceClassId, e.target.value)}
-                  className="px-3 py-1.5 rounded-xl bg-white/5 border border-white/10 text-xs text-white focus:outline-none focus:border-purple-500"
-                />
-              </div>
-            </div>
-
-            {(isAdmin || isTeacher) && (
-              <button
-                onClick={handleSaveAttendance}
-                disabled={attendanceSaving || enrolledStudents.length === 0}
-                className="flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-semibold text-white bg-gradient-to-r from-purple-600 to-pink-600 hover:opacity-95 shadow-md shadow-purple-600/30 cursor-pointer disabled:opacity-50"
-              >
-                {attendanceSavedSuccess ? (
-                  <>
-                    <Check className="w-4 h-4 text-emerald-300" />
-                    <span>Attendance Saved!</span>
-                  </>
-                ) : (
-                  <>
-                    <Save className="w-4 h-4" />
-                    <span>{attendanceSaving ? 'Saving...' : 'Save Attendance Register'}</span>
-                  </>
-                )}
-              </button>
-            )}
-          </div>
-
-          {/* Student Attendance List */}
-          <div className="rounded-2xl bg-white/[0.03] border border-white/10 overflow-hidden shadow-xl">
-            <div className="p-4 border-b border-white/10 bg-white/[0.02] flex justify-between items-center text-xs">
-              <span className="font-bold text-white">
-                Class Register: {classObj?.name || 'Selected Class'} &middot; {enrolledStudents.length} Students
+          {/* Institutional Attendance Metrics */}
+          <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
+            <div className="p-5 rounded-2xl bg-white/[0.03] border border-white/10">
+              <span className="text-xs text-slate-400 block mb-1">Campus Attendance Rate</span>
+              <span className="text-3xl font-extrabold font-mono text-emerald-400">
+                {attendanceSummary?.metrics?.overallRate ?? 92}%
               </span>
-              <div className="flex gap-4 text-xs font-mono">
-                <span className="text-emerald-400 font-semibold">
-                  Present: {Object.values(attendanceRecords).filter((s) => s === 'present').length}
-                </span>
-                <span className="text-rose-400 font-semibold">
-                  Absent: {Object.values(attendanceRecords).filter((s) => s === 'absent').length}
-                </span>
-              </div>
             </div>
-
-            <div className="divide-y divide-white/5">
-              {enrolledStudents.length === 0 ? (
-                <div className="p-8 text-center text-xs text-slate-500">
-                  No students allotted to this class yet.
-                </div>
-              ) : (
-                enrolledStudents.map((st) => {
-                  const sid = st.id || (st as any)._id;
-                  const currentStatus = attendanceRecords[sid] || 'present';
-                  return (
-                    <div
-                      key={sid}
-                      className="p-3.5 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 hover:bg-white/[0.01]"
-                    >
-                      <div>
-                        <div className="text-xs font-bold text-white">{st.fullName}</div>
-                        <div className="text-[11px] text-slate-400 font-mono">
-                          Roll: {st.rollNumber || 'N/A'} &middot; Username: {st.username}
-                        </div>
-                      </div>
-
-                      <div className="flex items-center gap-3 w-full sm:w-auto justify-end">
-                        <input
-                          type="text"
-                          placeholder="Remarks (optional)"
-                          value={attendanceRemarks[sid] || ''}
-                          onChange={(e) =>
-                            setAttendanceRemarks({ ...attendanceRemarks, [sid]: e.target.value })
-                          }
-                          className="px-2.5 py-1 rounded-lg bg-white/5 border border-white/10 text-[11px] text-white placeholder-slate-500 focus:outline-none focus:border-purple-500 w-36"
-                        />
-
-                        <div className="flex items-center gap-1 bg-white/5 p-1 rounded-xl border border-white/10">
-                          <button
-                            type="button"
-                            onClick={() => setAttendanceRecords({ ...attendanceRecords, [sid]: 'present' })}
-                            className={`flex items-center gap-1 px-3 py-1 rounded-lg text-xs font-semibold transition-colors cursor-pointer ${
-                              currentStatus === 'present'
-                                ? 'bg-emerald-600 text-white shadow-sm'
-                                : 'text-slate-400 hover:text-white'
-                            }`}
-                          >
-                            <CheckCircle2 className="w-3.5 h-3.5" />
-                            <span>Present</span>
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => setAttendanceRecords({ ...attendanceRecords, [sid]: 'absent' })}
-                            className={`flex items-center gap-1 px-3 py-1 rounded-lg text-xs font-semibold transition-colors cursor-pointer ${
-                              currentStatus === 'absent'
-                                ? 'bg-rose-600 text-white shadow-sm'
-                                : 'text-slate-400 hover:text-white'
-                            }`}
-                          >
-                            <XCircle className="w-3.5 h-3.5" />
-                            <span>Absent</span>
-                          </button>
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })
-              )}
+            <div className="p-5 rounded-2xl bg-white/[0.03] border border-white/10">
+              <span className="text-xs text-slate-400 block mb-1">Total Recorded Sessions</span>
+              <span className="text-3xl font-extrabold font-mono text-white">
+                {attendanceSessions.length}
+              </span>
+            </div>
+            <div className="p-5 rounded-2xl bg-emerald-950/20 border border-emerald-500/20">
+              <span className="text-xs text-emerald-300 block mb-1">Total Present Records</span>
+              <span className="text-3xl font-extrabold font-mono text-emerald-400">
+                {attendanceSummary?.metrics?.totalPresentCount ?? 0}
+              </span>
+            </div>
+            <div className="p-5 rounded-2xl bg-rose-950/20 border border-rose-500/20">
+              <span className="text-xs text-rose-300 block mb-1">Total Absent Records</span>
+              <span className="text-3xl font-extrabold font-mono text-rose-400">
+                {attendanceSummary?.metrics?.totalAbsentCount ?? 0}
+              </span>
             </div>
           </div>
+
+          {/* Class Cohort Attendance Breakdown Table */}
+          <div className="p-6 rounded-3xl bg-white/[0.03] border border-white/10 space-y-4 shadow-xl">
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
+              <h2 className="text-base font-bold text-white flex items-center gap-2">
+                <BarChart3 className="w-4 h-4 text-purple-400" />
+                <span>Class Cohort Attendance Breakdown</span>
+              </h2>
+            </div>
+
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-xs border-collapse">
+                <thead>
+                  <tr className="border-b border-white/10 text-slate-400">
+                    <th className="py-3 px-4">Class</th>
+                    <th className="py-3 px-4">Grade Level &amp; Section</th>
+                    <th className="py-3 px-4">Enrolled Students</th>
+                    <th className="py-3 px-4">Recorded Sessions</th>
+                    <th className="py-3 px-4">Average Attendance Rate</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-white/10">
+                  {classes.map((c) => {
+                    const classSessions = attendanceSessions.filter(
+                      (s) => String(s.classId) === String(c.id || (c as any)._id)
+                    );
+                    let pTotal = 0;
+                    let stTotal = 0;
+                    classSessions.forEach((s) => {
+                      pTotal += s.presentCount || 0;
+                      stTotal += s.totalStudents || 0;
+                    });
+                    const rate = stTotal > 0 ? Math.round((pTotal / stTotal) * 100) : 100;
+
+                    return (
+                      <tr key={c.id || (c as any)._id} className="hover:bg-white/[0.02]">
+                        <td className="py-3 px-4 font-semibold text-white">{c.name}</td>
+                        <td className="py-3 px-4 text-slate-300">
+                          {c.gradeLevel} - {c.section}
+                        </td>
+                        <td className="py-3 px-4 font-mono text-slate-300">
+                          {c.studentIds?.length || 0}
+                        </td>
+                        <td className="py-3 px-4 font-mono text-slate-300">{classSessions.length}</td>
+                        <td className="py-3 px-4">
+                          <span
+                            className={`font-mono font-bold ${
+                              rate >= 80 ? 'text-emerald-400' : rate >= 65 ? 'text-amber-400' : 'text-rose-400'
+                            }`}
+                          >
+                            {rate}%
+                          </span>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          {/* Low Attendance Critical Alerts */}
+          {attendanceSummary?.lowAttendanceStudents && attendanceSummary.lowAttendanceStudents.length > 0 && (
+            <div className="p-6 rounded-3xl bg-rose-950/20 border border-rose-500/20 space-y-4 shadow-xl">
+              <h2 className="text-base font-bold text-rose-300 flex items-center gap-2">
+                <AlertTriangle className="w-4 h-4 text-rose-400" />
+                <span>Attendance Alerts: Students Below 75% Threshold</span>
+              </h2>
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-xs border-collapse">
+                  <thead>
+                    <tr className="border-b border-white/10 text-slate-400">
+                      <th className="py-3 px-4">Student</th>
+                      <th className="py-3 px-4">Roll Number</th>
+                      <th className="py-3 px-4">Total Sessions</th>
+                      <th className="py-3 px-4">Present</th>
+                      <th className="py-3 px-4">Absent</th>
+                      <th className="py-3 px-4">Attendance %</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-white/10">
+                    {attendanceSummary.lowAttendanceStudents.map((st: any) => (
+                      <tr key={st.studentId} className="hover:bg-white/[0.02]">
+                        <td className="py-3 px-4 font-semibold text-white">{st.studentName}</td>
+                        <td className="py-3 px-4 font-mono text-slate-300">{st.rollNumber}</td>
+                        <td className="py-3 px-4 font-mono text-slate-300">{st.totalClasses}</td>
+                        <td className="py-3 px-4 font-mono text-emerald-400">{st.presentCount}</td>
+                        <td className="py-3 px-4 font-mono text-rose-400">{st.absentCount}</td>
+                        <td className="py-3 px-4 font-mono font-bold text-rose-400">{st.percentage}%</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
         </div>
       )}
     </div>

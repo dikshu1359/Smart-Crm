@@ -27,7 +27,7 @@ import { TenantUser, SchoolClass } from '../types/crm';
 import api from '../services/api';
 
 export const StudentImportantInformation: React.FC = () => {
-  const { activeTenant, currentUser, users, classes, refreshData } = useApp();
+  const { activeTenant, currentUser, users, classes, refreshData, printUserForm } = useApp();
 
   if (!currentUser || !activeTenant) return null;
 
@@ -242,13 +242,8 @@ export const StudentImportantInformation: React.FC = () => {
       }
     }
 
-    // Set printing student and invoke browser print
     setPrintingStudent(student);
-
-    // Clean browser print invocation
-    setTimeout(() => {
-      window.print();
-    }, 150);
+    printUserForm(student);
   };
 
   const currentClassForStudent = (student: TenantUser) => {
