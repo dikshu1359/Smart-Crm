@@ -49,12 +49,80 @@
   animation: floatSlow 8.5s ease-in-out 1.5s infinite;
 }
 
+.float-drift-1 {
+  animation: floatDrift1 12s ease-in-out infinite;
+}
+
+.float-drift-2 {
+  animation: floatDrift2 16s ease-in-out infinite;
+}
+
+.float-drift-3 {
+  animation: floatDrift3 14s ease-in-out infinite;
+}
+
+.pulse-ambient {
+  animation: pulseAmbient 8s ease-in-out infinite;
+}
+
 @keyframes floatSlow {
   0%, 100% {
     transform: translateY(0px) translateZ(30px);
   }
   50% {
     transform: translateY(-10px) translateZ(42px);
+  }
+}
+
+@keyframes floatDrift1 {
+  0%, 100% {
+    transform: translate(0px, 0px) rotate(0deg);
+  }
+  33% {
+    transform: translate(15px, -20px) rotate(8deg);
+  }
+  66% {
+    transform: translate(-10px, -35px) rotate(-6deg);
+  }
+}
+
+@keyframes floatDrift2 {
+  0%, 100% {
+    transform: translate(0px, 0px) rotate(0deg);
+  }
+  50% {
+    transform: translate(-25px, 20px) rotate(-12deg);
+  }
+}
+
+@keyframes floatDrift3 {
+  0%, 100% {
+    transform: translate(0px, 0px) scale(1);
+  }
+  50% {
+    transform: translate(20px, -15px) scale(1.08);
+  }
+}
+
+@keyframes pulseAmbient {
+  0%, 100% {
+    opacity: 0.35;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.65;
+    transform: scale(1.12);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .float-layer-slow,
+  .float-layer-delayed,
+  .float-drift-1,
+  .float-drift-2,
+  .float-drift-3,
+  .pulse-ambient {
+    animation: none !important;
   }
 }
 

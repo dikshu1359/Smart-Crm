@@ -96,28 +96,35 @@ app.use((err, req, res, next) => {
   res.status(500).json({ error: 'InternalServerError', message: err.message || 'An unexpected error occurred.' });
 });
 
-// Start Express Server
-const server = app.listen(PORT, '0.0.0.0', () => {
-  console.log(`Smart Institutional CRM Backend running on http://0.0.0.0:${PORT}`);
-  console.log(`Connected to Master Database: smart_crm_master`);
-});
+// Start Express Server when run directly
+const isDirectRun = Boolean(
+  process.argv[1] &&
+  (process.argv[1].endsWith('backend/server.js') || process.argv[1].endsWith('backend\\server.js'))
+);
 
-server.on('error', (err) => {
-  if (err.code === 'EADDRINUSE') {
-    console.warn(`[Backend] Port ${PORT} is already in use by an existing process. Reusing active instance.`);
-    process.exit(0);
-  } else {
-    console.error('[Backend] Server listen error:', err);
-    process.exit(1);
-  }
-});
+if (isDirectRun || process.env.RUN_STANDALONE === 'true') {
+  const server = app.listen(PORT, '0.0.0.0', () => {
+    console.log(`Smart Institutional CRM Backend running on http://0.0.0.0:${PORT}`);
+    console.log(`Connected to Master Database: smart_crm_master`);
+  });
 
-process.on('SIGTERM', () => {
-  server.close(() => process.exit(0));
-});
+  server.on('error', (err) => {
+    if (err.code === 'EADDRINUSE') {
+      console.warn(`[Backend] Port ${PORT} is already in use by an existing process. Reusing active instance.`);
+      process.exit(0);
+    } else {
+      console.error('[Backend] Server listen error:', err);
+      process.exit(1);
+    }
+  });
 
-process.on('SIGINT', () => {
-  server.close(() => process.exit(0));
-});
+  process.on('SIGTERM', () => {
+    server.close(() => process.exit(0));
+  });
+
+  process.on('SIGINT', () => {
+    server.close(() => process.exit(0));
+  });
+}
 
 export default app;

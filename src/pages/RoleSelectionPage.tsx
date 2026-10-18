@@ -13,6 +13,7 @@ import {
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { UserRole } from '../types/crm';
+import navbarLogo from '../assets/logo.png';
 
 interface RoleSelectionProps {
   initialRole?: UserRole | null;
@@ -109,9 +110,21 @@ export const RoleSelectionPage: React.FC<RoleSelectionProps> = ({ initialRole })
   };
 
   return (
-    <div className="min-h-screen bg-[#0B0A14] text-slate-100 flex flex-col justify-between p-6">
+    <div className="min-h-screen bg-[#0B0A14] text-slate-100 flex flex-col justify-between p-6 relative overflow-x-hidden">
+      {/* Ambient Lighting & Floating Animated Shapes */}
+      <div className="pointer-events-none fixed inset-0 overflow-hidden z-0 select-none">
+        <div className="absolute -top-40 -left-40 w-80 h-80 rounded-full bg-purple-600/15 blur-[120px] pulse-ambient" />
+        <div className="absolute top-1/3 -right-40 w-96 h-96 rounded-full bg-pink-600/15 blur-[140px] pulse-ambient" />
+        <div className="absolute bottom-10 left-1/4 w-80 h-80 rounded-full bg-cyan-600/10 blur-[130px] pulse-ambient" />
+
+        <div className="absolute top-20 right-[20%] w-10 h-10 rounded-xl border border-purple-500/20 bg-purple-500/5 float-drift-1" />
+        <div className="absolute bottom-28 left-[15%] w-12 h-12 rounded-full border border-pink-500/20 bg-pink-500/5 float-drift-2" />
+        <div className="absolute top-1/2 left-[10%] w-2 h-2 rounded-full bg-purple-400/30 float-drift-3" />
+        <div className="absolute top-2/3 right-[12%] w-2.5 h-2.5 rounded-full bg-cyan-400/40 float-drift-1" />
+      </div>
+
       {/* Top Bar with Back Button */}
-      <div className="max-w-4xl w-full mx-auto flex items-center justify-between mb-8">
+      <div className="max-w-4xl w-full mx-auto flex items-center justify-between mb-8 relative z-10">
         <button
           onClick={() => {
             if (role) {
@@ -126,9 +139,11 @@ export const RoleSelectionPage: React.FC<RoleSelectionProps> = ({ initialRole })
           <span>{role ? 'Change Role' : 'Back to Home'}</span>
         </button>
 
-        <div className="flex items-center gap-2 text-xs font-medium text-slate-400">
-          <Database className="w-3.5 h-3.5 text-purple-400" />
-          <span>Smart Multi-Tenant CRM</span>
+        <div className="flex items-center gap-2 text-xs font-medium text-slate-300">
+          <div className="w-6 h-6 rounded-lg overflow-hidden border border-purple-500/30 bg-[#0d0c1d] shrink-0">
+            <img src={navbarLogo} alt="Logo" className="w-full h-full object-cover" />
+          </div>
+          <span className="font-semibold text-white">Smart Institutional CRM</span>
         </div>
       </div>
 
@@ -150,16 +165,16 @@ export const RoleSelectionPage: React.FC<RoleSelectionProps> = ({ initialRole })
               {/* Admin Card */}
               <button
                 onClick={() => setRole('admin')}
-                className="p-6 rounded-2xl bg-white/[0.03] border border-white/10 hover:border-purple-500/50 hover:bg-purple-950/20 transition-all text-left group cursor-pointer"
+                className="p-6 rounded-2xl bg-white/[0.03] border border-white/10 hover:border-purple-500/60 hover:shadow-xl hover:shadow-purple-500/15 hover:-translate-y-1 active:scale-[0.98] transition-all duration-300 text-left group cursor-pointer backdrop-blur-md"
               >
-                <div className="w-12 h-12 rounded-xl bg-purple-500/10 border border-purple-500/20 flex items-center justify-center text-purple-400 mb-4 group-hover:scale-105 transition-transform">
+                <div className="w-12 h-12 rounded-xl bg-purple-500/10 border border-purple-500/20 flex items-center justify-center text-purple-400 mb-4 group-hover:scale-105 group-hover:bg-purple-500/20 transition-all">
                   <Building2 className="w-6 h-6" />
                 </div>
                 <h2 className="text-base font-bold text-white mb-1">Administrator</h2>
                 <p className="text-xs text-slate-400 mb-4">
                   Register new institution or login to manage academic operations.
                 </p>
-                <span className="text-[11px] font-semibold text-purple-400 inline-flex items-center gap-1">
+                <span className="text-[11px] font-semibold text-purple-400 inline-flex items-center gap-1 group-hover:translate-x-0.5 transition-transform">
                   Login & Register <ArrowRight className="w-3 h-3" />
                 </span>
               </button>
@@ -167,16 +182,16 @@ export const RoleSelectionPage: React.FC<RoleSelectionProps> = ({ initialRole })
               {/* Teacher Card */}
               <button
                 onClick={() => setRole('teacher')}
-                className="p-6 rounded-2xl bg-white/[0.03] border border-white/10 hover:border-pink-500/50 hover:bg-pink-950/20 transition-all text-left group cursor-pointer"
+                className="p-6 rounded-2xl bg-white/[0.03] border border-white/10 hover:border-pink-500/60 hover:shadow-xl hover:shadow-pink-500/15 hover:-translate-y-1 active:scale-[0.98] transition-all duration-300 text-left group cursor-pointer backdrop-blur-md"
               >
-                <div className="w-12 h-12 rounded-xl bg-pink-500/10 border border-pink-500/20 flex items-center justify-center text-pink-400 mb-4 group-hover:scale-105 transition-transform">
+                <div className="w-12 h-12 rounded-xl bg-pink-500/10 border border-pink-500/20 flex items-center justify-center text-pink-400 mb-4 group-hover:scale-105 group-hover:bg-pink-500/20 transition-all">
                   <Lock className="w-6 h-6" />
                 </div>
                 <h2 className="text-base font-bold text-white mb-1">Teacher / Faculty</h2>
                 <p className="text-xs text-slate-400 mb-4">
                   Access classes, assignments, grading, quizzes, and timetable.
                 </p>
-                <span className="text-[11px] font-semibold text-pink-400 inline-flex items-center gap-1">
+                <span className="text-[11px] font-semibold text-pink-400 inline-flex items-center gap-1 group-hover:translate-x-0.5 transition-transform">
                   Teacher Login <ArrowRight className="w-3 h-3" />
                 </span>
               </button>
@@ -184,16 +199,16 @@ export const RoleSelectionPage: React.FC<RoleSelectionProps> = ({ initialRole })
               {/* Student Card */}
               <button
                 onClick={() => setRole('student')}
-                className="p-6 rounded-2xl bg-white/[0.03] border border-white/10 hover:border-purple-500/50 hover:bg-purple-950/20 transition-all text-left group cursor-pointer"
+                className="p-6 rounded-2xl bg-white/[0.03] border border-white/10 hover:border-cyan-500/60 hover:shadow-xl hover:shadow-cyan-500/15 hover:-translate-y-1 active:scale-[0.98] transition-all duration-300 text-left group cursor-pointer backdrop-blur-md"
               >
-                <div className="w-12 h-12 rounded-xl bg-purple-500/10 border border-purple-500/20 flex items-center justify-center text-purple-400 mb-4 group-hover:scale-105 transition-transform">
+                <div className="w-12 h-12 rounded-xl bg-cyan-500/10 border border-cyan-500/20 flex items-center justify-center text-cyan-400 mb-4 group-hover:scale-105 group-hover:bg-cyan-500/20 transition-all">
                   <GraduationCap className="w-6 h-6" />
                 </div>
                 <h2 className="text-base font-bold text-white mb-1">Student</h2>
                 <p className="text-xs text-slate-400 mb-4">
                   Access assignments, timetables, quizzes, results, and teacher chat.
                 </p>
-                <span className="text-[11px] font-semibold text-purple-400 inline-flex items-center gap-1">
+                <span className="text-[11px] font-semibold text-cyan-400 inline-flex items-center gap-1 group-hover:translate-x-0.5 transition-transform">
                   Student Login <ArrowRight className="w-3 h-3" />
                 </span>
               </button>

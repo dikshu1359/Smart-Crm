@@ -262,71 +262,88 @@ class InMemoryCollection {
     return this.findOne({ _id: id });
   }
 
-  async findByIdAndUpdate(id, update, options = { new: true }) {
-    const idStr = String(id);
-    const index = this.documents.findIndex((d) => String(d._id) === idStr || String(d.id) === idStr);
-    if (index === -1) return null;
+  findByIdAndUpdate(id, update, options = { new: true }) {
+    const doUpdate = async () => {
+      const idStr = String(id);
+      const index = this.documents.findIndex((d) => String(d._id) === idStr || String(d.id) === idStr);
+      if (index === -1) return null;
 
-    const existing = { ...this.documents[index] };
-    let updated = { ...existing };
+      const existing = { ...this.documents[index] };
+      let updated = { ...existing };
 
-    if (update.$set) {
-      Object.assign(updated, update.$set);
-    }
-    if (update.$addToSet) {
-      for (const [key, val] of Object.entries(update.$addToSet)) {
-        if (!Array.isArray(updated[key])) updated[key] = [];
-        if (!updated[key].map(String).includes(String(val))) {
-          updated[key].push(val);
+      if (update.$set) {
+        Object.assign(updated, update.$set);
+      }
+      if (update.$addToSet) {
+        for (const [key, val] of Object.entries(update.$addToSet)) {
+          if (!Array.isArray(updated[key])) updated[key] = [];
+          if (!updated[key].map(String).includes(String(val))) {
+            updated[key].push(val);
+          }
         }
       }
-    }
-    if (update.$pull) {
-      for (const [key, val] of Object.entries(update.$pull)) {
-        if (Array.isArray(updated[key])) {
-          updated[key] = updated[key].filter((item) => String(item) !== String(val));
+      if (update.$pull) {
+        for (const [key, val] of Object.entries(update.$pull)) {
+          if (Array.isArray(updated[key])) {
+            updated[key] = updated[key].filter((item) => String(item) !== String(val));
+          }
         }
       }
-    }
-    if (update.$inc) {
-      for (const [key, val] of Object.entries(update.$inc)) {
-        updated[key] = (Number(updated[key]) || 0) + Number(val);
+      if (update.$inc) {
+        for (const [key, val] of Object.entries(update.$inc)) {
+          updated[key] = (Number(updated[key]) || 0) + Number(val);
+        }
       }
-    }
 
-    // Direct plain fields
-    for (const [key, val] of Object.entries(update)) {
-      if (!key.startsWith('$')) {
-        updated[key] = val;
+      // Direct plain fields
+      for (const [key, val] of Object.entries(update)) {
+        if (!key.startsWith('$')) {
+          updated[key] = val;
+        }
       }
-    }
 
-    updated.updatedAt = new Date();
-    this.documents[index] = updated;
+      updated.updatedAt = new Date();
+      this.documents[index] = updated;
 
-    return wrapDocument(options.new ? updated : existing, this);
+      return wrapDocument(options.new ? updated : existing, this);
+    };
+
+    const q = new InMemoryQuery(doUpdate());
+    q._isSingle = true;
+    return q;
   }
 
-  async findOneAndUpdate(query = {}, update = {}, options = { new: true }) {
-    let doc = this.documents.find((d) => matchFilter(d, query));
-    if (!doc) {
-      if (options.upsert) {
-        let initialDoc = { ...query };
-        if (update.$set) Object.assign(initialDoc, update.$set);
-        for (const [k, v] of Object.entries(update)) {
-          if (!k.startsWith('$')) initialDoc[k] = v;
+  findOneAndUpdate(query = {}, update = {}, options = { new: true }) {
+    const doFindAndUpdate = async () => {
+      let doc = this.documents.find((d) => matchFilter(d, query));
+      if (!doc) {
+        if (options.upsert) {
+          let initialDoc = { ...query };
+          if (update.$set) Object.assign(initialDoc, update.$set);
+          for (const [k, v] of Object.entries(update)) {
+            if (!k.startsWith('$')) initialDoc[k] = v;
+          }
+          return this.create(initialDoc);
         }
-        return this.create(initialDoc);
+        return null;
       }
-      return null;
-    }
-    return this.findByIdAndUpdate(doc._id || doc.id, update, options);
+      return this.findByIdAndUpdate(doc._id || doc.id, update, options);
+    };
+
+    const q = new InMemoryQuery(doFindAndUpdate());
+    q._isSingle = true;
+    return q;
   }
 
-  async findOneAndDelete(query = {}) {
-    const doc = this.documents.find((d) => matchFilter(d, query));
-    if (!doc) return null;
-    return this.findByIdAndDelete(doc._id || doc.id);
+  findOneAndDelete(query = {}) {
+    const doFindAndDelete = async () => {
+      const doc = this.documents.find((d) => matchFilter(d, query));
+      if (!doc) return null;
+      return this.findByIdAndDelete(doc._id || doc.id);
+    };
+    const q = new InMemoryQuery(doFindAndDelete());
+    q._isSingle = true;
+    return q;
   }
 
   async updateOne(query = {}, update = {}, options = {}) {
@@ -334,12 +351,17 @@ class InMemoryCollection {
     return { matchedCount: res ? 1 : 0, modifiedCount: res ? 1 : 0 };
   }
 
-  async findByIdAndDelete(id) {
-    const idStr = String(id);
-    const index = this.documents.findIndex((d) => String(d._id) === idStr || String(d.id) === idStr);
-    if (index === -1) return null;
-    const [removed] = this.documents.splice(index, 1);
-    return wrapDocument(removed, this);
+  findByIdAndDelete(id) {
+    const doDelete = async () => {
+      const idStr = String(id);
+      const index = this.documents.findIndex((d) => String(d._id) === idStr || String(d.id) === idStr);
+      if (index === -1) return null;
+      const [removed] = this.documents.splice(index, 1);
+      return wrapDocument(removed, this);
+    };
+    const q = new InMemoryQuery(doDelete());
+    q._isSingle = true;
+    return q;
   }
 
   async create(payload) {

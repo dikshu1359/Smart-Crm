@@ -15,6 +15,7 @@ import {
   HelpCircle,
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
+import navbarLogo from '../assets/logo.png';
 
 export const LandingPage: React.FC = () => {
   const { setCurrentView, setSelectedRole } = useApp();
@@ -30,11 +31,34 @@ export const LandingPage: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-[#0B0A14] text-slate-100 relative overflow-x-hidden">
+      {/* Ambient Lighting & Floating Animated Shapes */}
+      <div className="pointer-events-none absolute inset-0 overflow-hidden z-0 select-none">
+        <div className="absolute -top-40 -left-40 w-96 h-96 rounded-full bg-purple-600/20 blur-[130px] pulse-ambient" />
+        <div className="absolute top-1/4 -right-40 w-[450px] h-[450px] rounded-full bg-pink-600/15 blur-[150px] pulse-ambient" />
+        <div className="absolute top-2/3 left-1/3 w-96 h-96 rounded-full bg-cyan-600/15 blur-[140px] pulse-ambient" />
+
+        {/* Floating circles, squares, curved particles */}
+        <div className="absolute top-24 left-[12%] w-14 h-14 rounded-full border border-purple-500/25 bg-purple-500/5 float-drift-1" />
+        <div className="absolute top-44 right-[15%] w-10 h-10 rounded-xl border border-pink-500/25 bg-pink-500/5 rotate-12 float-drift-2" />
+        <div className="absolute top-[520px] left-[8%] w-8 h-8 rounded-lg border border-cyan-400/25 bg-cyan-400/5 -rotate-6 float-drift-3" />
+        <div className="absolute top-[680px] right-[10%] w-16 h-16 rounded-full border border-purple-400/20 bg-purple-500/5 float-drift-1" />
+        <div className="absolute bottom-[400px] left-[18%] w-12 h-12 rounded-2xl border border-pink-400/20 bg-pink-500/5 rotate-45 float-drift-2" />
+
+        <div className="absolute top-36 left-[35%] w-2 h-2 rounded-full bg-purple-400/40 float-drift-3" />
+        <div className="absolute top-72 right-[32%] w-1.5 h-1.5 rounded-full bg-cyan-400/50 float-drift-1" />
+        <div className="absolute top-[900px] left-[25%] w-2 h-2 rounded-full bg-pink-400/40 float-drift-2" />
+        <div className="absolute top-[1100px] right-[20%] w-2.5 h-2.5 rounded-full bg-purple-400/30 float-drift-3" />
+      </div>
+
       {/* Top Bar */}
-      <header className="relative z-20 flex items-center justify-between gap-8 max-w-[1360px] mx-auto px-6 py-5 border-b border-white/10">
+      <header className="relative z-20 flex items-center justify-between gap-8 max-w-[1360px] mx-auto px-6 py-5 border-b border-white/10 backdrop-blur-md">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-purple-600 to-pink-500 flex items-center justify-center shadow-lg shadow-purple-500/20">
-            <Building2 className="w-5 h-5 text-white" />
+          <div className="w-10 h-10 rounded-xl overflow-hidden shadow-lg shadow-purple-500/25 border border-purple-500/30 flex items-center justify-center bg-[#0d0c1d] shrink-0">
+            <img
+              src={navbarLogo}
+              alt="Smart Institutional CRM Logo"
+              className="w-full h-full object-cover"
+            />
           </div>
           <span className="text-lg font-bold tracking-tight text-white font-display whitespace-nowrap">
             Smart Institutional CRM
@@ -88,14 +112,14 @@ export const LandingPage: React.FC = () => {
           <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
             <button
               onClick={() => handleStart()}
-              className="w-full sm:w-auto px-6 py-3.5 text-sm font-semibold text-white bg-gradient-to-r from-purple-600 via-pink-600 to-purple-600 rounded-xl hover:opacity-95 transition-all shadow-lg shadow-purple-600/30 flex items-center justify-center gap-2 cursor-pointer"
+              className="w-full sm:w-auto px-6 py-3.5 text-sm font-semibold text-white bg-gradient-to-r from-purple-600 via-pink-600 to-purple-600 rounded-xl hover:opacity-95 active:scale-[0.98] transition-all shadow-lg shadow-purple-600/30 flex items-center justify-center gap-2 cursor-pointer"
             >
               <span>Get Started</span>
               <ArrowRight className="w-4 h-4" />
             </button>
             <button
               onClick={() => handleStart('admin')}
-              className="w-full sm:w-auto px-6 py-3.5 text-sm font-semibold text-slate-200 hover:text-white border border-white/10 hover:border-white/20 bg-white/5 backdrop-blur-md rounded-xl transition-all cursor-pointer"
+              className="w-full sm:w-auto px-6 py-3.5 text-sm font-semibold text-slate-200 hover:text-white border border-white/10 hover:border-white/20 bg-white/5 hover:bg-white/10 backdrop-blur-md rounded-xl active:scale-[0.98] transition-all cursor-pointer"
             >
               Register New Institution
             </button>
@@ -114,7 +138,7 @@ export const LandingPage: React.FC = () => {
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            <div className="p-6 rounded-2xl bg-white/[0.03] border border-white/10 backdrop-blur-md hover:border-purple-500/40 transition-all">
+            <div className="p-6 rounded-2xl bg-white/[0.03] border border-white/10 backdrop-blur-md hover:border-purple-500/50 hover:shadow-xl hover:shadow-purple-500/10 hover:-translate-y-1 transition-all duration-300">
               <div className="w-12 h-12 rounded-xl bg-purple-500/10 border border-purple-500/20 flex items-center justify-center text-purple-400 mb-4">
                 <Database className="w-6 h-6" />
               </div>
@@ -124,7 +148,7 @@ export const LandingPage: React.FC = () => {
               </p>
             </div>
 
-            <div className="p-6 rounded-2xl bg-white/[0.03] border border-white/10 backdrop-blur-md hover:border-purple-500/40 transition-all">
+            <div className="p-6 rounded-2xl bg-white/[0.03] border border-white/10 backdrop-blur-md hover:border-pink-500/50 hover:shadow-xl hover:shadow-pink-500/10 hover:-translate-y-1 transition-all duration-300">
               <div className="w-12 h-12 rounded-xl bg-pink-500/10 border border-pink-500/20 flex items-center justify-center text-pink-400 mb-4">
                 <FileCheck2 className="w-6 h-6" />
               </div>
@@ -134,7 +158,7 @@ export const LandingPage: React.FC = () => {
               </p>
             </div>
 
-            <div className="p-6 rounded-2xl bg-white/[0.03] border border-white/10 backdrop-blur-md hover:border-purple-500/40 transition-all">
+            <div className="p-6 rounded-2xl bg-white/[0.03] border border-white/10 backdrop-blur-md hover:border-purple-500/50 hover:shadow-xl hover:shadow-purple-500/10 hover:-translate-y-1 transition-all duration-300">
               <div className="w-12 h-12 rounded-xl bg-purple-500/10 border border-purple-500/20 flex items-center justify-center text-purple-400 mb-4">
                 <CalendarClock className="w-6 h-6" />
               </div>
@@ -144,7 +168,7 @@ export const LandingPage: React.FC = () => {
               </p>
             </div>
 
-            <div className="p-6 rounded-2xl bg-white/[0.03] border border-white/10 backdrop-blur-md hover:border-purple-500/40 transition-all">
+            <div className="p-6 rounded-2xl bg-white/[0.03] border border-white/10 backdrop-blur-md hover:border-pink-500/50 hover:shadow-xl hover:shadow-pink-500/10 hover:-translate-y-1 transition-all duration-300">
               <div className="w-12 h-12 rounded-xl bg-pink-500/10 border border-pink-500/20 flex items-center justify-center text-pink-400 mb-4">
                 <HelpCircle className="w-6 h-6" />
               </div>
@@ -154,7 +178,7 @@ export const LandingPage: React.FC = () => {
               </p>
             </div>
 
-            <div className="p-6 rounded-2xl bg-white/[0.03] border border-white/10 backdrop-blur-md hover:border-purple-500/40 transition-all">
+            <div className="p-6 rounded-2xl bg-white/[0.03] border border-white/10 backdrop-blur-md hover:border-purple-500/50 hover:shadow-xl hover:shadow-purple-500/10 hover:-translate-y-1 transition-all duration-300">
               <div className="w-12 h-12 rounded-xl bg-purple-500/10 border border-purple-500/20 flex items-center justify-center text-purple-400 mb-4">
                 <MessageSquare className="w-6 h-6" />
               </div>
@@ -164,7 +188,7 @@ export const LandingPage: React.FC = () => {
               </p>
             </div>
 
-            <div className="p-6 rounded-2xl bg-white/[0.03] border border-white/10 backdrop-blur-md hover:border-purple-500/40 transition-all">
+            <div className="p-6 rounded-2xl bg-white/[0.03] border border-white/10 backdrop-blur-md hover:border-pink-500/50 hover:shadow-xl hover:shadow-pink-500/10 hover:-translate-y-1 transition-all duration-300">
               <div className="w-12 h-12 rounded-xl bg-pink-500/10 border border-pink-500/20 flex items-center justify-center text-pink-400 mb-4">
                 <BarChart3 className="w-6 h-6" />
               </div>
@@ -188,7 +212,7 @@ export const LandingPage: React.FC = () => {
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            <div className="p-6 rounded-2xl bg-gradient-to-b from-purple-950/20 to-transparent border border-purple-500/20 flex flex-col justify-between">
+            <div className="p-6 rounded-2xl bg-gradient-to-b from-purple-950/20 to-transparent border border-purple-500/20 hover:border-purple-500/50 hover:shadow-xl hover:shadow-purple-500/10 hover:-translate-y-1 transition-all duration-300 flex flex-col justify-between">
               <div>
                 <div className="w-10 h-10 rounded-lg bg-purple-600/20 border border-purple-500/30 flex items-center justify-center text-purple-400 mb-4">
                   <Building2 className="w-5 h-5" />
@@ -211,13 +235,13 @@ export const LandingPage: React.FC = () => {
               </div>
               <button
                 onClick={() => handleStart('admin')}
-                className="w-full py-2.5 px-4 text-xs font-semibold text-white bg-purple-600 hover:bg-purple-500 rounded-lg transition-all cursor-pointer"
+                className="w-full py-2.5 px-4 text-xs font-semibold text-white bg-purple-600 hover:bg-purple-500 active:scale-[0.98] rounded-lg transition-all cursor-pointer"
               >
                 Access Admin Portal
               </button>
             </div>
 
-            <div className="p-6 rounded-2xl bg-gradient-to-b from-pink-950/20 to-transparent border border-pink-500/20 flex flex-col justify-between">
+            <div className="p-6 rounded-2xl bg-gradient-to-b from-pink-950/20 to-transparent border border-pink-500/20 hover:border-pink-500/50 hover:shadow-xl hover:shadow-pink-500/10 hover:-translate-y-1 transition-all duration-300 flex flex-col justify-between">
               <div>
                 <div className="w-10 h-10 rounded-lg bg-pink-600/20 border border-pink-500/30 flex items-center justify-center text-pink-400 mb-4">
                   <Lock className="w-5 h-5" />
@@ -240,13 +264,13 @@ export const LandingPage: React.FC = () => {
               </div>
               <button
                 onClick={() => handleStart('teacher')}
-                className="w-full py-2.5 px-4 text-xs font-semibold text-white bg-pink-600 hover:bg-pink-500 rounded-lg transition-all cursor-pointer"
+                className="w-full py-2.5 px-4 text-xs font-semibold text-white bg-pink-600 hover:bg-pink-500 active:scale-[0.98] rounded-lg transition-all cursor-pointer"
               >
                 Access Teacher Portal (Login Only)
               </button>
             </div>
 
-            <div className="p-6 rounded-2xl bg-gradient-to-b from-purple-950/20 to-transparent border border-purple-500/20 flex flex-col justify-between">
+            <div className="p-6 rounded-2xl bg-gradient-to-b from-purple-950/20 to-transparent border border-purple-500/20 hover:border-purple-500/50 hover:shadow-xl hover:shadow-purple-500/10 hover:-translate-y-1 transition-all duration-300 flex flex-col justify-between">
               <div>
                 <div className="w-10 h-10 rounded-lg bg-purple-600/20 border border-purple-500/30 flex items-center justify-center text-purple-400 mb-4">
                   <GraduationCap className="w-5 h-5" />
@@ -269,7 +293,7 @@ export const LandingPage: React.FC = () => {
               </div>
               <button
                 onClick={() => handleStart('student')}
-                className="w-full py-2.5 px-4 text-xs font-semibold text-white bg-purple-600 hover:bg-purple-500 rounded-lg transition-all cursor-pointer"
+                className="w-full py-2.5 px-4 text-xs font-semibold text-white bg-purple-600 hover:bg-purple-500 active:scale-[0.98] rounded-lg transition-all cursor-pointer"
               >
                 Access Student Portal (Login Only)
               </button>

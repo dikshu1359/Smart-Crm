@@ -20,6 +20,7 @@ import {
   Lock,
   Briefcase,
   UserCheck,
+  Users,
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { TenantUser, SchoolClass } from '../types/crm';

@@ -23,6 +23,7 @@ import {
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { DashboardTab, UserRole } from '../types/crm';
+import navbarLogo from '../assets/logo.png';
 
 interface NavigationProps {
   mobileOpen: boolean;
@@ -98,10 +99,16 @@ export const Navigation: React.FC<NavigationProps> = ({ mobileOpen, setMobileOpe
       roles: ['admin', 'teacher', 'student'],
     },
     {
+      id: 'roster',
+      label: 'Student Roster',
+      icon: Users,
+      roles: ['teacher'],
+    },
+    {
       id: 'marks',
       label: currentUser.role === 'student' ? 'My Marks & Gradebook' : 'Marks Spreadsheet',
       icon: Table,
-      roles: ['admin', 'teacher', 'student'],
+      roles: ['teacher', 'student'],
     },
     {
       id: 'schedule',
@@ -169,11 +176,15 @@ export const Navigation: React.FC<NavigationProps> = ({ mobileOpen, setMobileOpe
       {/* Brand Header */}
       <div className="px-5 py-5 border-b border-white/10 flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <div className="w-8 h-8 rounded-lg bg-gradient-to-tr from-purple-600 to-pink-500 flex items-center justify-center shadow-md">
-            <Building2 className="w-4 h-4 text-white" />
+          <div className="w-9 h-9 rounded-xl overflow-hidden shadow-md shadow-purple-500/25 border border-purple-500/30 flex items-center justify-center bg-[#0d0c1d] shrink-0">
+            <img
+              src={navbarLogo}
+              alt="Smart Institutional CRM Logo"
+              className="w-full h-full object-cover"
+            />
           </div>
           <div>
-            <div className="text-sm font-bold font-display text-white">Smart Edu CRM</div>
+            <div className="text-sm font-bold font-display text-white">Smart Institutional CRM</div>
             <div className="text-[10px] font-mono text-purple-300 truncate max-w-[170px]">
               {activeTenant.databaseName}
             </div>

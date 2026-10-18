@@ -47,9 +47,11 @@ export async function tenantAuth(req, res, next) {
         req.databaseName = dbName;
         return next();
       } catch (jwtErr) {
+        console.warn('[tenantAuth] JWT verification failed:', jwtErr.message, 'Secret length:', JWT_SECRET?.length);
         return res.status(401).json({
           error: 'InvalidToken',
           message: 'Session token is invalid or expired.',
+          details: jwtErr.message,
         });
       }
     }

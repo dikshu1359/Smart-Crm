@@ -12,7 +12,7 @@ import { QuizManagement } from './components/QuizManagement';
 import { MarksSpreadsheet } from './components/MarksSpreadsheet';
 import { StudentAttendance } from './components/StudentAttendance';
 import { StudentImportantInformation } from './components/StudentImportantInformation';
-import { StudentRosterImport } from './components/StudentRosterImport';
+import { TeacherStudentRoster } from './components/TeacherStudentRoster';
 import { ScheduleManagement } from './components/ScheduleManagement';
 import { AcademicCalendar } from './components/AcademicCalendar';
 import { PerformanceAnalytics } from './components/PerformanceAnalytics';
@@ -73,8 +73,8 @@ const CRMWorkspaceShell: React.FC = () => {
               <DashboardOverview />
             ))}
           {activeTab === 'quizzes' && <QuizManagement />}
-          {activeTab === 'marks' && <MarksSpreadsheet />}
-          {activeTab === 'roster' && (currentUser.role === 'teacher' ? <StudentAttendance /> : <DashboardOverview />)}
+          {activeTab === 'marks' && (currentUser.role === 'admin' ? <PerformanceAnalytics /> : <MarksSpreadsheet />)}
+          {activeTab === 'roster' && (currentUser.role === 'teacher' ? <TeacherStudentRoster /> : <DashboardOverview />)}
           {activeTab === 'schedule' && <ScheduleManagement />}
           {activeTab === 'calendar' && <AcademicCalendar />}
           {activeTab === 'analytics' && <PerformanceAnalytics />}

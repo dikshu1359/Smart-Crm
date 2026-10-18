@@ -4,6 +4,8 @@ dotenv.config();
 
 const JWT_SECRET = process.env.JWT_SECRET || 'smart-institutional-crm-super-secret-jwt-key';
 const dbName = 'smart_crm_vcetadmin_1792247322612';
+const TEST_PORT = process.env.TEST_PORT || process.env.PORT || 3000;
+const BASE_URL = `http://127.0.0.1:${TEST_PORT}/api`;
 
 const adminToken = jwt.sign({
   id: '6ad3861aee1bd533a001b2ca',
@@ -26,8 +28,8 @@ async function testAll() {
   console.log('================================================================');
 
   // Fetch users & classes as Admin
-  const usersRes = await fetch('http://localhost:5001/api/users', { headers: adminHeaders }).then(r => r.json());
-  const classesRes = await fetch('http://localhost:5001/api/classes', { headers: adminHeaders }).then(r => r.json());
+  const usersRes = await fetch(`${BASE_URL}/users`, { headers: adminHeaders }).then(r => r.json());
+  const classesRes = await fetch(`${BASE_URL}/classes`, { headers: adminHeaders }).then(r => r.json());
 
   const students = usersRes.users.filter(u => u.role === 'student');
   const teachers = usersRes.users.filter(u => u.role === 'teacher');
@@ -77,7 +79,7 @@ async function testAll() {
   console.log('\n--- 1. Testing Admin Timetable (Monday to Saturday + Configurable Breaks) ---');
 
   // 1A. Schedule a Saturday slot
-  const satSlotRes = await fetch('http://localhost:5001/api/schedule', {
+  const satSlotRes = await fetch(`${BASE_URL}/schedule`, {
     method: 'POST',
     headers: adminHeaders,
     body: JSON.stringify({
@@ -93,7 +95,7 @@ async function testAll() {
   console.log('1A. Saturday Slot Created:', satSlotRes.status === 201 ? 'PASS (201)' : 'FAIL', satSlotRes.data?.slot?.subject);
 
   // 1B. Configure a custom break (Lunch Break 12:15 - 13:00, not hardcoded!)
-  const breakRes = await fetch('http://localhost:5001/api/schedule', {
+  const breakRes = await fetch(`${BASE_URL}/schedule`, {
     method: 'POST',
     headers: adminHeaders,
     body: JSON.stringify({
@@ -108,7 +110,7 @@ async function testAll() {
   console.log('1B. Configurable Lunch Break (12:15 - 13:00):', breakRes.status === 201 ? 'PASS (201)' : 'FAIL', breakRes.data?.slot?.breakTitle);
 
   // 1C. Validation: End time <= Start time must return 400
-  const invalidTimeRes = await fetch('http://localhost:5001/api/schedule', {
+  const invalidTimeRes = await fetch(`${BASE_URL}/schedule`, {
     method: 'POST',
     headers: adminHeaders,
     body: JSON.stringify({
@@ -123,7 +125,7 @@ async function testAll() {
   console.log('1C. Invalid Start >= End Time Rejected:', invalidTimeRes.status === 400 ? 'PASS (400 InvalidTimeRange)' : 'FAIL');
 
   // 1D. Retrieve timetable and verify Saturday & Break persist
-  const scheduleGet = await fetch('http://localhost:5001/api/schedule', { headers: adminHeaders }).then(r => r.json());
+  const scheduleGet = await fetch(`${BASE_URL}/schedule`, { headers: adminHeaders }).then(r => r.json());
   const foundSat = scheduleGet.schedules.some(s => s.day === 'Saturday' && s.subject.includes('Robotics'));
   const foundBreak = scheduleGet.schedules.some(s => s.isBreak && s.timeSlot === '12:15 - 13:00');
   console.log('1D. Timetable Persistence: Saturday found:', foundSat ? 'YES' : 'NO', '| Configurable Break found:', foundBreak ? 'YES' : 'NO');
@@ -157,7 +159,7 @@ async function testAll() {
     assignedClassId: 'HACKED-CLASS-ID',
   };
 
-  const studentUpdateRes = await fetch(`http://localhost:5001/api/users/${student1.id}`, {
+  const studentUpdateRes = await fetch(`${BASE_URL}/users/${student1.id}`, {
     method: 'PUT',
     headers: s1Headers,
     body: JSON.stringify(updateStudentPayload),
@@ -170,7 +172,7 @@ async function testAll() {
   console.log('   Protected Roll Number preserved (not changed by student):', studentUpdateRes.data?.user?.rollNumber !== 'HACKED-ROLL-999' ? 'PASS' : 'FAIL');
 
   // Verify database persistence on next fetch
-  const getMeRes = await fetch('http://localhost:5001/api/users', { headers: s1Headers }).then(r => r.json());
+  const getMeRes = await fetch(`${BASE_URL}/users`, { headers: s1Headers }).then(r => r.json());
   const freshStudent1 = getMeRes.users.find(u => u.id === student1.id);
   console.log('2B. Reloaded Profile from Database:', freshStudent1?.fatherOccupation === 'Chief Electrical Engineer' ? 'PASS (Data Persisted)' : 'FAIL');
 
@@ -180,12 +182,12 @@ async function testAll() {
   console.log('\n--- 3. Testing Student Data Isolation (Student 1 vs Student 2) ---');
 
   // 3A. User directory isolation: Student 1 must NEVER receive Student 2's record
-  const s1UsersRes = await fetch('http://localhost:5001/api/users', { headers: s1Headers }).then(r => r.json());
+  const s1UsersRes = await fetch(`${BASE_URL}/users`, { headers: s1Headers }).then(r => r.json());
   const s1SeesS2 = s1UsersRes.users.some(u => u.id === student2.id);
   console.log('3A. Student 1 Querying Users - Can see Student 2?', s1SeesS2 ? 'FAIL (LEAK!)' : 'PASS (ISOLATED - Student 2 is hidden)');
 
   // 3B. Cross-student edit block: Student 1 trying to edit Student 2's profile
-  const crossEditRes = await fetch(`http://localhost:5001/api/users/${student2.id}`, {
+  const crossEditRes = await fetch(`${BASE_URL}/users/${student2.id}`, {
     method: 'PUT',
     headers: s1Headers,
     body: JSON.stringify({ fullName: 'Malicious Overwrite' }),
@@ -193,7 +195,7 @@ async function testAll() {
   console.log('3B. Student 1 attempting to edit Student 2 profile:', crossEditRes.status === 403 ? 'PASS (403 Forbidden)' : 'FAIL');
 
   // 3C. Marks isolation: Seed marks for both students and verify
-  await fetch('http://localhost:5001/api/marks/batch', {
+  await fetch(`${BASE_URL}/marks/batch`, {
     method: 'POST',
     headers: adminHeaders,
     body: JSON.stringify({
@@ -224,8 +226,8 @@ async function testAll() {
     }),
   });
 
-  const s1Marks = await fetch('http://localhost:5001/api/marks', { headers: s1Headers }).then(r => r.json());
-  const s2Marks = await fetch('http://localhost:5001/api/marks', { headers: s2Headers }).then(r => r.json());
+  const s1Marks = await fetch(`${BASE_URL}/marks`, { headers: s1Headers }).then(r => r.json());
+  const s2Marks = await fetch(`${BASE_URL}/marks`, { headers: s2Headers }).then(r => r.json());
 
   const s1HasS2Marks = s1Marks.marks?.some(m => m.studentId === student2.id);
   const s2HasS1Marks = s2Marks.marks?.some(m => m.studentId === student1.id);
@@ -234,7 +236,7 @@ async function testAll() {
   console.log('3D. Student 2 Marks Isolation - Sees Student 1 marks?', s2HasS1Marks ? 'FAIL (LEAK!)' : 'PASS (Zero Student 1 Marks Visible)');
 
   // 3E. Attendance isolation:
-  const s1Attendance = await fetch('http://localhost:5001/api/attendance/summary', { headers: s1Headers }).then(r => r.json());
+  const s1Attendance = await fetch(`${BASE_URL}/attendance/summary`, { headers: s1Headers }).then(r => r.json());
   const s1AttendanceStudents = s1Attendance.studentSummary || [];
   const s1SeesOtherAttendance = s1AttendanceStudents.some(s => s.studentId !== student1.id);
   console.log('3E. Student Attendance Summary Isolation - Sees other students?', s1SeesOtherAttendance ? 'FAIL (LEAK!)' : 'PASS (Only Own Attendance Returned)');
@@ -258,7 +260,7 @@ async function testAll() {
     'x-tenant-database': dbName,
   };
 
-  const teacherUsersRes = await fetch('http://localhost:5001/api/users?role=student', { headers: teacherHeaders }).then(r => r.json());
+  const teacherUsersRes = await fetch(`${BASE_URL}/users?role=student`, { headers: teacherHeaders }).then(r => r.json());
   const studentForForm = teacherUsersRes.users.find(u => u.id === student1.id);
   console.log('4A. Teacher can fetch assigned student:', Boolean(studentForForm) ? 'PASS' : 'FAIL');
   console.log('   Form Data contains Father Name:', Boolean(studentForForm?.fatherName) ? 'PASS' : 'FAIL');

@@ -260,10 +260,14 @@ router.put('/:id', async (req, res) => {
       updates.mustChangePassword = false;
     }
 
-    const updatedUser = await req.tenantDb.User.findByIdAndUpdate(id, updates, { new: true }).select('-passwordHash');
+    let updatedUser = await req.tenantDb.User.findByIdAndUpdate(id, updates, { new: true });
     if (!updatedUser) {
       return res.status(404).json({ error: 'UserNotFound', message: 'User not found.' });
     }
+
+    const userObj = updatedUser.toObject ? updatedUser.toObject() : { ...updatedUser };
+    delete userObj.passwordHash;
+    userObj.id = updatedUser._id ? updatedUser._id.toString() : updatedUser.id;
 
     await dbManager.logActivity({
       databaseName: req.databaseName,
@@ -271,10 +275,10 @@ router.put('/:id', async (req, res) => {
       actorName: req.user?.fullName || 'User',
       actorRole: req.user?.role || 'user',
       actionCategory: 'USER_MGMT',
-      description: `Updated profile details for account ${updatedUser.fullName}`,
+      description: `Updated profile details for account ${userObj.fullName}`,
     });
 
-    res.json({ success: true, user: updatedUser });
+    res.json({ success: true, user: userObj });
   } catch (err) {
     res.status(500).json({ error: 'UpdateUserError', message: err.message });
   }
