@@ -23,11 +23,31 @@ function getAuthHeaders(databaseName?: string): HeadersInit {
   return headers;
 }
 
+async function safeJson<T = any>(res: Response, fallback: T): Promise<T> {
+  try {
+    const contentType = res.headers.get('content-type') || '';
+    if (contentType.includes('application/json')) {
+      const data = await res.json();
+      return (data ?? fallback) as T;
+    }
+    const text = await res.text();
+    try {
+      return JSON.parse(text) as T;
+    } catch {
+      console.warn(`[api] Expected JSON but received ${contentType || 'non-JSON'}:`, text.slice(0, 100));
+      return fallback;
+    }
+  } catch (err) {
+    console.warn('[api] Failed to parse JSON response:', err);
+    return fallback;
+  }
+}
+
 export const api = {
   // Health
   async getHealth() {
     const res = await fetch(`${BASE_URL}/health`);
-    return res.json();
+    return safeJson(res, { status: 'offline' });
   },
 
   // Auth
@@ -244,26 +264,64 @@ export const api = {
 
   // Chat
   async getChatContacts(databaseName: string) {
-    const res = await fetch(`${BASE_URL}/chat/contacts`, {
-      headers: getAuthHeaders(databaseName),
-    });
-    return res.json();
+    try {
+      const res = await fetch(`${BASE_URL}/chat/contacts`, {
+        headers: getAuthHeaders(databaseName),
+      });
+      return await safeJson(res, { contacts: [] });
+    } catch (e: any) {
+      console.warn('[api] getChatContacts error:', e.message);
+      return { contacts: [] };
+    }
   },
 
   async getChatMessages(databaseName: string, recipientId: string) {
-    const res = await fetch(`${BASE_URL}/chat/messages/${recipientId}`, {
-      headers: getAuthHeaders(databaseName),
-    });
-    return res.json();
+    if (!recipientId || recipientId === 'undefined' || recipientId === 'null') {
+      return { messages: [] };
+    }
+    try {
+      const res = await fetch(`${BASE_URL}/chat/messages/${encodeURIComponent(recipientId)}`, {
+        headers: getAuthHeaders(databaseName),
+      });
+      return await safeJson(res, { messages: [] });
+    } catch (e: any) {
+      console.warn('[api] getChatMessages error:', e.message);
+      return { messages: [] };
+    }
   },
 
-  async sendChatMessage(databaseName: string, recipientId: string, text: string, attachments?: any[]) {
-    const res = await fetch(`${BASE_URL}/chat/messages`, {
-      method: 'POST',
-      headers: getAuthHeaders(databaseName),
-      body: JSON.stringify({ recipientId, text, attachments }),
-    });
-    return res.json();
+  async sendChatMessage(
+    databaseName: string,
+    recipientId: string,
+    textOrPayload: string | { text?: string; content?: string; message?: string; attachments?: any[]; callData?: any },
+    attachments?: any[]
+  ) {
+    if (!recipientId || recipientId === 'undefined' || recipientId === 'null') {
+      return { success: false, error: 'InvalidRecipient', message: 'Recipient is required.' };
+    }
+    let payload: any = {};
+    if (typeof textOrPayload === 'string') {
+      payload = { recipientId, text: textOrPayload, content: textOrPayload, message: textOrPayload, attachments };
+    } else {
+      payload = {
+        recipientId,
+        text: textOrPayload.text || textOrPayload.content || textOrPayload.message || '',
+        content: textOrPayload.content || textOrPayload.text || textOrPayload.message || '',
+        message: textOrPayload.message || textOrPayload.content || textOrPayload.text || '',
+        ...textOrPayload,
+      };
+    }
+    try {
+      const res = await fetch(`${BASE_URL}/chat/messages`, {
+        method: 'POST',
+        headers: getAuthHeaders(databaseName),
+        body: JSON.stringify(payload),
+      });
+      return await safeJson(res, { success: false, message: 'Server communication error' });
+    } catch (e: any) {
+      console.warn('[api] sendChatMessage error:', e.message);
+      return { success: false, message: e.message || 'Failed to send message' };
+    }
   },
 
   // Schedule

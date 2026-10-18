@@ -105,7 +105,10 @@ interface AppContextValue {
   createNotice: (payload: any) => Promise<{ ok: boolean; message?: string }>;
   markNoticeRead: (noticeId: string) => Promise<{ ok: boolean; message?: string }>;
   deleteNotice: (noticeId: string) => Promise<{ ok: boolean; message?: string }>;
-  sendChatMessage: (recipientId: string, text: string, attachments?: any[]) => Promise<{ ok: boolean; message?: string }>;
+  selectedChatContactId: string | null;
+  setSelectedChatContactId: (id: string | null) => void;
+  openChatWith: (contactId: string) => void;
+  sendChatMessage: (recipientId: string, textOrPayload: string | { text?: string; content?: string; message?: string; attachments?: any[]; callData?: any }, attachments?: any[]) => Promise<{ ok: boolean; message?: any }>;
   deleteTenant: (databaseName: string) => Promise<{ ok: boolean; message?: string }>;
   fetchMarks: (filter?: { classId?: string; subject?: string; assessmentTitle?: string }) => Promise<StudentMarksRecord[]>;
   saveMarksBatch: (payload: any) => Promise<{ ok: boolean; message?: string; count?: number }>;
@@ -147,6 +150,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [attendanceSessions, setAttendanceSessions] = useState<AttendanceSession[]>([]);
   const [attendanceSummary, setAttendanceSummary] = useState<any>(null);
   const [marks, setMarks] = useState<StudentMarksRecord[]>([]);
+  const [selectedChatContactId, setSelectedChatContactId] = useState<string | null>(null);
 
   const setCurrentView = (view: AppView) => {
     // Protected routes check: Cannot open dashboard if unauthenticated
@@ -612,12 +616,21 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   };
 
-  const sendChatMessage = async (recipientId: string, text: string, attachments?: any[]) => {
+  const openChatWith = useCallback((contactId: string) => {
+    setSelectedChatContactId(contactId);
+    setActiveTab('chat');
+  }, []);
+
+  const sendChatMessage = async (
+    recipientId: string,
+    textOrPayload: string | { text?: string; content?: string; message?: string; attachments?: any[]; callData?: any },
+    attachments?: any[]
+  ) => {
     if (!activeTenant) return { ok: false, message: 'No active institution.' };
     try {
-      const res = await api.sendChatMessage(activeTenant.databaseName, recipientId, text, attachments);
+      const res = await api.sendChatMessage(activeTenant.databaseName, recipientId, textOrPayload, attachments);
       if (!res.success) return { ok: false, message: res.message || 'Failed to send message.' };
-      return { ok: true };
+      return { ok: true, message: res.message };
     } catch (err: any) {
       return { ok: false, message: err.message };
     }
@@ -802,6 +815,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         markNoticeRead,
         deleteNotice,
         sendChatMessage,
+        selectedChatContactId,
+        setSelectedChatContactId,
+        openChatWith,
         deleteTenant,
         fetchMarks,
         saveMarksBatch,

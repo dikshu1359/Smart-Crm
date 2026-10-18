@@ -351,6 +351,26 @@ class InMemoryCollection {
     return { matchedCount: res ? 1 : 0, modifiedCount: res ? 1 : 0 };
   }
 
+  async updateMany(query = {}, update = {}, options = {}) {
+    let matchedCount = 0;
+    let modifiedCount = 0;
+    const updateFields = update.$set ? update.$set : update;
+
+    for (let i = 0; i < this.documents.length; i++) {
+      if (matchFilter(this.documents[i], query)) {
+        matchedCount++;
+        for (const [key, val] of Object.entries(updateFields)) {
+          if (!key.startsWith('$')) {
+            this.documents[i][key] = val;
+          }
+        }
+        this.documents[i].updatedAt = new Date();
+        modifiedCount++;
+      }
+    }
+    return { matchedCount, modifiedCount, acknowledged: true };
+  }
+
   findByIdAndDelete(id) {
     const doDelete = async () => {
       const idStr = String(id);

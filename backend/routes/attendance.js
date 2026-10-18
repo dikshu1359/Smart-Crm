@@ -143,7 +143,8 @@ router.get('/summary', async (req, res) => {
       return {
         ...s,
         percentage: pct,
-        statusBadge: pct >= 85 ? 'Good' : pct >= 75 ? 'Average' : 'Low Warning',
+        statusBadge: pct >= 75 ? 'Good' : pct >= 60 ? 'Average' : 'Critical Low',
+        badgeColor: pct >= 75 ? 'green' : pct >= 60 ? 'yellow' : 'red',
       };
     });
 

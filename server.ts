@@ -17,6 +17,17 @@ async function startServer() {
       res.sendFile(path.resolve(__dirname, 'dist', 'index.html'));
     });
   } else {
+    // Intercept any unhandled /api requests so Vite never returns index.html for API calls
+    app.use((req, res, next) => {
+      if (req.path.startsWith('/api')) {
+        return res.status(404).json({
+          error: 'EndpointNotFound',
+          message: `API route ${req.method} ${req.originalUrl} not found.`,
+        });
+      }
+      next();
+    });
+
     const vite = await createViteServer({
       server: {
         middlewareMode: true,
@@ -24,6 +35,7 @@ async function startServer() {
       },
       appType: 'spa',
     });
+
     app.use(vite.middlewares);
   }
 

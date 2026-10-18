@@ -423,10 +423,18 @@ export const StudentAttendance: React.FC = () => {
           <div className="p-5 rounded-2xl bg-white/[0.03] border border-white/10">
             <span className="text-xs text-slate-400 block mb-1">Attendance Rate</span>
             <div className="flex items-baseline gap-2">
-              <span className={`text-3xl font-extrabold font-mono ${studentStats.rate >= 80 ? 'text-emerald-400' : 'text-amber-400'}`}>
+              <span className={`text-3xl font-extrabold font-mono ${studentStats.rate >= 75 ? 'text-emerald-400' : studentStats.rate >= 60 ? 'text-amber-400' : 'text-rose-400'}`}>
                 {studentStats.rate}%
               </span>
-              <span className="text-[11px] text-slate-500">overall</span>
+              <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold uppercase ${
+                studentStats.rate >= 75
+                  ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
+                  : studentStats.rate >= 60
+                  ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
+                  : 'bg-rose-500/20 text-rose-300 border border-rose-500/30'
+              }`}>
+                {studentStats.rate >= 75 ? 'Good (≥75%)' : studentStats.rate >= 60 ? 'Average (60-74%)' : 'Critical (<60%)'}
+              </span>
             </div>
           </div>
 

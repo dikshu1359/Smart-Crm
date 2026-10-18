@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
   LayoutDashboard,
   Users,
@@ -277,11 +277,24 @@ export const Navigation: React.FC<NavigationProps> = ({ mobileOpen, setMobileOpe
 };
 
 export const TopWorkspaceBar: React.FC<{ onOpenMobileMenu: () => void }> = ({ onOpenMobileMenu }) => {
-  const { activeTenant, activeTab, notices, currentUser, setActiveTab } = useApp();
+  const {
+    activeTenant,
+    activeTab,
+    notices,
+    currentUser,
+    setActiveTab,
+    chatContacts,
+    openChatWith,
+  } = useApp();
+
+  const [showChatMenu, setShowChatMenu] = useState(false);
 
   const unreadNoticeCount = notices.filter(
     (n) => !n.readByUserIds?.includes(currentUser?.id || (currentUser as any)?._id)
   ).length;
+
+  const contactsWithUnread = chatContacts.filter((c) => (c.unreadCount || 0) > 0);
+  const totalUnreadChat = contactsWithUnread.reduce((acc, c) => acc + (c.unreadCount || 0), 0);
 
   return (
     <header className="sticky top-0 z-30 bg-[#141124]/80 backdrop-blur-md border-b border-white/10 px-6 py-3.5 flex items-center justify-between gap-6">
@@ -296,7 +309,66 @@ export const TopWorkspaceBar: React.FC<{ onOpenMobileMenu: () => void }> = ({ on
         </div>
       </div>
 
-      <div className="flex items-center gap-3">
+      <div className="flex items-center gap-3 relative">
+        {/* Chat Notifications */}
+        <div className="relative">
+          <button
+            onClick={() => {
+              if (contactsWithUnread.length === 1) {
+                openChatWith(contactsWithUnread[0].id);
+              } else if (contactsWithUnread.length > 1) {
+                setShowChatMenu((prev) => !prev);
+              } else {
+                setActiveTab('chat');
+              }
+            }}
+            className="px-3 py-1.5 rounded-lg text-xs font-medium bg-white/5 hover:bg-white/10 text-slate-200 flex items-center gap-1.5 cursor-pointer relative"
+            title="Messages & Chat"
+          >
+            <MessageSquare className="w-3.5 h-3.5 text-purple-400" />
+            <span>Messages</span>
+            {totalUnreadChat > 0 && (
+              <span className="px-1.5 py-0.2 rounded-full bg-pink-500 text-white font-mono text-[10px] font-bold animate-pulse">
+                {totalUnreadChat}
+              </span>
+            )}
+          </button>
+
+          {/* Unread Chat Dropdown Menu */}
+          {showChatMenu && contactsWithUnread.length > 0 && (
+            <div className="absolute right-0 mt-2 w-64 bg-[#141124] border border-white/20 rounded-2xl p-2 shadow-2xl z-50 space-y-1">
+              <div className="px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider text-purple-300 border-b border-white/10 flex justify-between items-center">
+                <span>New Messages ({totalUnreadChat})</span>
+                <button
+                  onClick={() => setShowChatMenu(false)}
+                  className="text-slate-400 hover:text-white"
+                >
+                  <X className="w-3 h-3" />
+                </button>
+              </div>
+              {contactsWithUnread.map((c) => (
+                <button
+                  key={c.id}
+                  onClick={() => {
+                    setShowChatMenu(false);
+                    openChatWith(c.id);
+                  }}
+                  className="w-full text-left p-2.5 rounded-xl hover:bg-white/10 flex items-center justify-between transition-colors cursor-pointer"
+                >
+                  <div className="min-w-0">
+                    <p className="text-xs font-semibold text-white truncate">{c.fullName}</p>
+                    <p className="text-[10px] text-slate-400 capitalize">{c.role}</p>
+                  </div>
+                  <span className="w-5 h-5 rounded-full bg-pink-500 text-white text-[10px] font-bold flex items-center justify-center shrink-0">
+                    {c.unreadCount}
+                  </span>
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Notices */}
         <button
           onClick={() => setActiveTab('notices')}
           className="px-3 py-1.5 rounded-lg text-xs font-medium bg-white/5 hover:bg-white/10 text-slate-200 flex items-center gap-1.5 cursor-pointer"

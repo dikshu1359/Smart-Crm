@@ -187,7 +187,8 @@ export interface QuizAttempt {
 }
 
 export interface ChatMessage {
-  _id: string;
+  id?: string;
+  _id?: string;
   conversationId: string;
   senderId: string;
   senderName: string;
@@ -196,9 +197,18 @@ export interface ChatMessage {
   recipientName: string;
   recipientRole: UserRole;
   text: string;
+  content?: string;
+  message?: string;
   attachments?: FileAttachment[];
+  callData?: {
+    type: 'audio' | 'video';
+    duration: number;
+    status: 'completed' | 'missed' | 'declined';
+    timestamp: string;
+  };
   read: boolean;
   createdAt: string;
+  timestamp?: string;
 }
 
 export interface ChatContact {

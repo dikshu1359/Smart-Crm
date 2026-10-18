@@ -275,9 +275,9 @@ export const DashboardOverview: React.FC = () => {
           <div className="p-5 rounded-2xl bg-white/[0.03] border border-white/10">
             <div className="flex justify-between items-center text-xs text-slate-400">
               <span>My Attendance Rate</span>
-              <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+              <CheckCircle2 className={`w-4 h-4 ${studentPersonalData.personalAttendanceRate >= 75 ? 'text-emerald-400' : studentPersonalData.personalAttendanceRate >= 60 ? 'text-amber-400' : 'text-rose-400'}`} />
             </div>
-            <div className="text-2xl font-bold font-mono text-emerald-400 mt-2 tabular-nums">
+            <div className={`text-2xl font-bold font-mono mt-2 tabular-nums ${studentPersonalData.personalAttendanceRate >= 75 ? 'text-emerald-400' : studentPersonalData.personalAttendanceRate >= 60 ? 'text-amber-400' : 'text-rose-400'}`}>
               {studentPersonalData.personalAttendanceRate}%
             </div>
             <div className="text-xs text-slate-400 mt-1">
@@ -610,11 +610,11 @@ export const DashboardOverview: React.FC = () => {
             <div className="p-5 rounded-2xl bg-white/[0.02] border border-white/10 space-y-3">
               <div className="flex items-center justify-between">
                 <span className="text-xs font-bold text-white flex items-center gap-1.5">
-                  <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+                  <CheckCircle2 className={`w-4 h-4 ${studentPersonalData.personalAttendanceRate >= 75 ? 'text-emerald-400' : studentPersonalData.personalAttendanceRate >= 60 ? 'text-amber-400' : 'text-rose-400'}`} />
                   <span>My Attendance Regularity</span>
                 </span>
-                <span className="text-[11px] font-mono text-emerald-400 font-bold">
-                  {studentPersonalData.personalAttendanceRate}% Overall
+                <span className={`text-[11px] font-mono font-bold ${studentPersonalData.personalAttendanceRate >= 75 ? 'text-emerald-400' : studentPersonalData.personalAttendanceRate >= 60 ? 'text-amber-400' : 'text-rose-400'}`}>
+                  {studentPersonalData.personalAttendanceRate}% Overall &bull; {studentPersonalData.personalAttendanceRate >= 75 ? 'Regular' : studentPersonalData.personalAttendanceRate >= 60 ? 'Warning' : 'Critical'}
                 </span>
               </div>
 

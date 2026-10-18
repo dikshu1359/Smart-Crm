@@ -74,9 +74,9 @@ app.use('/api/calendar', calendarRouter);
 app.use('/api/attendance', attendanceRouter);
 app.use('/api/marks', marksRouter);
 
-// 404 Route handler
-app.use('/api/*', (req, res) => {
-  res.status(404).json({ error: 'EndpointNotFound', message: `Route ${req.originalUrl} does not exist.` });
+// 404 Route handler for all /api endpoints
+app.all(['/api', '/api/*'], (req, res) => {
+  res.status(404).json({ error: 'EndpointNotFound', message: `Route ${req.method} ${req.originalUrl} does not exist.` });
 });
 
 // Error handling middleware
