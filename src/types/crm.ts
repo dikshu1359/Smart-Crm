@@ -297,6 +297,8 @@ export interface AttendanceSession {
   markedByTeacherId?: string;
   markedByTeacherName?: string;
   records: AttendanceRecordItem[];
+  personalStatus?: 'present' | 'absent' | 'unmarked' | string;
+  personalRemarks?: string;
   totalStudents: number;
   presentCount: number;
   absentCount: number;

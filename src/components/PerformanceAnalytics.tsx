@@ -120,12 +120,7 @@ export const PerformanceAnalytics: React.FC = () => {
             </button>
           )}
           <button
-            onClick={() => {
-              setActiveSubTab('attendance');
-              if (classes.length > 0 && !attendanceClassId) {
-                handleLoadClassAttendance(classes[0].id || (classes[0] as any)._id, attendanceDate);
-              }
-            }}
+            onClick={() => setActiveSubTab('attendance')}
             className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors cursor-pointer ${
               activeSubTab === 'attendance' ? 'bg-purple-600 text-white' : 'text-slate-400 hover:text-white'
             }`}
