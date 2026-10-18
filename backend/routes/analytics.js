@@ -244,11 +244,53 @@ router.get('/', tenantAuth, async (req, res) => {
       },
       gradeDistribution,
       subjectPerformance,
-      studentPerformance: role === 'student' ? studentPerformance.filter((s) => s.studentId === userId) : studentPerformance,
+      studentPerformance:
+        role === 'student'
+          ? studentPerformance.filter((s) => s.studentId === userId)
+          : role === 'teacher'
+          ? studentPerformance.filter((s) => {
+              const teacher = allUsers.find((u) => u._id.toString() === userId);
+              const assigned = (teacher?.assignedClassIds || []).map(String);
+              const primary = allClasses.filter((c) => String(c.primaryTeacherId) === String(userId)).map((c) => c._id.toString());
+              const teacherClasses = new Set([...assigned, ...primary]);
+              return teacherClasses.has(String(s.classId));
+            })
+          : studentPerformance,
       teacherPerformance: role === 'teacher' ? teacherPerformance.filter((t) => t.teacherId === userId) : teacherPerformance,
-      classPerformance,
-      topStudents: role === 'student' ? [] : topStudents,
-      studentsNeedingAttention: role === 'student' ? [] : studentsNeedingAttention,
+      classPerformance:
+        role === 'teacher'
+          ? classPerformance.filter((cp) => {
+              const teacher = allUsers.find((u) => u._id.toString() === userId);
+              const assigned = (teacher?.assignedClassIds || []).map(String);
+              const primary = allClasses.filter((c) => String(c.primaryTeacherId) === String(userId)).map((c) => c._id.toString());
+              const teacherClasses = new Set([...assigned, ...primary]);
+              return teacherClasses.has(String(cp.classId));
+            })
+          : classPerformance,
+      topStudents:
+        role === 'student'
+          ? []
+          : role === 'teacher'
+          ? topStudents.filter((s) => {
+              const teacher = allUsers.find((u) => u._id.toString() === userId);
+              const assigned = (teacher?.assignedClassIds || []).map(String);
+              const primary = allClasses.filter((c) => String(c.primaryTeacherId) === String(userId)).map((c) => c._id.toString());
+              const teacherClasses = new Set([...assigned, ...primary]);
+              return teacherClasses.has(String(s.classId));
+            })
+          : topStudents,
+      studentsNeedingAttention:
+        role === 'student'
+          ? []
+          : role === 'teacher'
+          ? studentsNeedingAttention.filter((s) => {
+              const teacher = allUsers.find((u) => u._id.toString() === userId);
+              const assigned = (teacher?.assignedClassIds || []).map(String);
+              const primary = allClasses.filter((c) => String(c.primaryTeacherId) === String(userId)).map((c) => c._id.toString());
+              const teacherClasses = new Set([...assigned, ...primary]);
+              return teacherClasses.has(String(s.classId));
+            })
+          : studentsNeedingAttention,
     });
   } catch (err) {
     res.status(500).json({ error: 'AnalyticsError', message: err.message });

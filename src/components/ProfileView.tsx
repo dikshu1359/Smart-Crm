@@ -17,8 +17,12 @@ import {
   Users,
   Briefcase,
   User,
+  Download,
+  Loader2,
 } from 'lucide-react';
 import api from '../services/api';
+import { exportProfileToPdf } from '../utils/exportProfilePdf';
+import { TenantUser } from '../types/crm';
 
 export const ProfileView: React.FC = () => {
   const { activeTenant, currentUser, refreshData, setActiveTab, classes } = useApp();
@@ -139,6 +143,59 @@ export const ProfileView: React.FC = () => {
     }
   };
 
+  const [isExporting, setIsExporting] = useState(false);
+  const [exportError, setExportError] = useState<string | null>(null);
+  const [exportSuccess, setExportSuccess] = useState<string | null>(null);
+
+  const handleExportProfile = async () => {
+    if (isExporting) return;
+    setIsExporting(true);
+    setExportError(null);
+    setExportSuccess(null);
+
+    try {
+      const userToExport: TenantUser = {
+        ...currentUser,
+        fullName: fullName.trim() || currentUser.fullName,
+        email: email.trim() || currentUser.email,
+        phone: phone.trim() || currentUser.phone,
+        residentialAddress: residentialAddress.trim() || currentUser.residentialAddress,
+        dateOfBirth: isStudent ? dateOfBirth : currentUser.dateOfBirth,
+        gender: isStudent ? gender : currentUser.gender,
+        gradeLevel: isStudent ? gradeLevel : currentUser.gradeLevel,
+        departmentBranch: isStudent ? departmentBranch : currentUser.departmentBranch,
+        classDivision: isStudent ? classDivision : currentUser.classDivision,
+        casteCategory: isStudent ? casteCategory : currentUser.casteCategory,
+        religion: isStudent ? religion : currentUser.religion,
+        fatherName: isStudent ? fatherName : currentUser.fatherName,
+        fatherContact: isStudent ? fatherContact : currentUser.fatherContact,
+        fatherOccupation: isStudent ? fatherOccupation : currentUser.fatherOccupation,
+        fatherAddress: isStudent ? fatherAddress : currentUser.fatherAddress,
+        motherName: isStudent ? motherName : currentUser.motherName,
+        motherContact: isStudent ? motherContact : currentUser.motherContact,
+        motherOccupation: isStudent ? motherOccupation : currentUser.motherOccupation,
+        motherAddress: isStudent ? motherAddress : currentUser.motherAddress,
+        guardianContact: isStudent ? guardianContact : currentUser.guardianContact,
+        specialization: isTeacher ? specialization : currentUser.specialization,
+        qualification: isTeacher ? qualification : currentUser.qualification,
+      };
+
+      const filename = await exportProfileToPdf({
+        user: userToExport,
+        institutionName: activeTenant.institutionName,
+        campusCode: activeTenant.campusCode,
+        className: assignedClass ? `${assignedClass.name} - ${assignedClass.section}` : userToExport.classDivision,
+      });
+
+      setExportSuccess(`Successfully generated and downloaded ${filename}`);
+      setTimeout(() => setExportSuccess(null), 5000);
+    } catch (err: any) {
+      setExportError(err.message || 'Failed to export profile to PDF.');
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
   return (
     <div className="max-w-4xl space-y-6">
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
@@ -149,17 +206,51 @@ export const ProfileView: React.FC = () => {
           </p>
         </div>
 
-        {isStudent && (
+        <div className="flex items-center gap-2">
           <button
             type="button"
-            onClick={() => setActiveTab('student-data')}
-            className="px-4 py-2 text-xs font-semibold text-white bg-purple-600 hover:bg-purple-500 rounded-xl transition-all shadow-md shadow-purple-600/30 flex items-center gap-2 cursor-pointer"
+            disabled={isExporting}
+            onClick={handleExportProfile}
+            className="px-4 py-2 text-xs font-semibold text-white bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 rounded-xl transition-all shadow-md shadow-purple-600/30 flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
           >
-            <Printer className="w-4 h-4" />
-            <span>View &amp; Print Enrolment Form</span>
+            {isExporting ? (
+              <>
+                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                <span>Generating PDF...</span>
+              </>
+            ) : (
+              <>
+                <Download className="w-3.5 h-3.5" />
+                <span>Export Form (PDF)</span>
+              </>
+            )}
           </button>
-        )}
+
+          {isStudent && (
+            <button
+              type="button"
+              onClick={() => setActiveTab('student-data')}
+              className="px-4 py-2 text-xs font-semibold text-slate-200 hover:text-white bg-white/5 hover:bg-white/10 border border-white/10 rounded-xl transition-all flex items-center gap-2 cursor-pointer"
+            >
+              <Printer className="w-4 h-4" />
+              <span>Full Dossier View</span>
+            </button>
+          )}
+        </div>
       </div>
+
+      {exportSuccess && (
+        <div className="p-3.5 rounded-xl bg-emerald-950/50 border border-emerald-500/40 text-xs text-emerald-200 flex items-center gap-2">
+          <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+          <span>{exportSuccess}</span>
+        </div>
+      )}
+      {exportError && (
+        <div className="p-3.5 rounded-xl bg-red-950/50 border border-red-500/40 text-xs text-red-200 flex items-center gap-2">
+          <AlertCircle className="w-4 h-4 text-red-400 shrink-0" />
+          <span>{exportError}</span>
+        </div>
+      )}
 
       <form onSubmit={handleSaveProfile} className="space-y-6">
         {/* Profile Card Header */}

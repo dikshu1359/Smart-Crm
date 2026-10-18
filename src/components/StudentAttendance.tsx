@@ -342,6 +342,11 @@ export const StudentAttendance: React.FC = () => {
     setSaveError(null);
     setSaveSuccessToast(null);
 
+    if (!selectedClassId) {
+      setSaveError('Please select a valid class cohort before recording attendance.');
+      return;
+    }
+
     if (classStudents.length === 0) {
       setSaveError('No students are enrolled in this class to record attendance for.');
       return;

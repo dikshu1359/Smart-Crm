@@ -17,8 +17,6 @@ export default defineConfig(() => {
       port: 3000,
       host: '0.0.0.0',
       allowedHosts: true as const,
-      // Configure clientPort: 443 for Cloud Run / preview environments where SSL terminates at 443,
-      // avoiding WebSocket closed without opened when client defaults to port 24678/3000.
       hmr: {
         clientPort: isCloudEnv ? 443 : 3000,
       },

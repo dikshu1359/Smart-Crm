@@ -4,7 +4,7 @@
  * with JWT token and x-tenant-database header propagation.
  */
 
-const BASE_URL = '/api';
+const BASE_URL = (import.meta.env.VITE_API_URL ? String(import.meta.env.VITE_API_URL).replace(/\/+$/, '') : '') + '/api';
 
 function getAuthHeaders(databaseName?: string): HeadersInit {
   const token = typeof window !== 'undefined' ? localStorage.getItem('smart_crm_token') : null;

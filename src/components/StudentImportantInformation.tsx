@@ -21,10 +21,13 @@ import {
   Briefcase,
   UserCheck,
   Users,
+  Download,
+  Loader2,
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { TenantUser, SchoolClass } from '../types/crm';
 import api from '../services/api';
+import { exportProfileToPdf } from '../utils/exportProfilePdf';
 
 export const StudentImportantInformation: React.FC = () => {
   const { activeTenant, currentUser, users, classes, refreshData, printUserForm } = useApp();
@@ -227,7 +230,54 @@ export const StudentImportantInformation: React.FC = () => {
     }
   };
 
-  // Safe Teacher Print Form Handler
+  const [isExporting, setIsExporting] = useState<string | null>(null);
+  const [exportSuccess, setExportSuccess] = useState<string | null>(null);
+
+  // Safe Student / Teacher Profile PDF Export Handler
+  const handleExportPdf = async (student: TenantUser) => {
+    if (isExporting) return;
+    setPrintError(null);
+    setExportSuccess(null);
+
+    // Verify authorization
+    if (isTeacher) {
+      const isAuthorized = eligibleStudents.some(
+        (s) => s.id === student.id || (s as any)._id === student.id || (s as any)._id === (student as any)._id
+      );
+      if (!isAuthorized) {
+        setPrintError('Unauthorized: You can only export records for students in your assigned cohorts.');
+        return;
+      }
+    } else if (isStudent) {
+      const uId = String(currentUser.id || (currentUser as any)._id);
+      const stId = String(student.id || (student as any)._id);
+      if (uId !== stId) {
+        setPrintError('Unauthorized: You can only export your own student profile form.');
+        return;
+      }
+    }
+
+    const sId = student.id || (student as any)._id || 'active';
+    setIsExporting(sId);
+
+    try {
+      const studentClass = currentClassForStudent(student);
+      const filename = await exportProfileToPdf({
+        user: student,
+        institutionName: activeTenant.institutionName,
+        campusCode: activeTenant.campusCode,
+        className: studentClass ? `${studentClass.name} - ${studentClass.section}` : student.classDivision,
+      });
+      setExportSuccess(`Successfully generated and downloaded ${filename}`);
+      setTimeout(() => setExportSuccess(null), 5000);
+    } catch (err: any) {
+      setPrintError(err.message || 'Failed to generate and download profile PDF.');
+    } finally {
+      setIsExporting(null);
+    }
+  };
+
+  // Safe Teacher Print Form Handler (fallback)
   const handlePrint = (student: TenantUser) => {
     setPrintError(null);
 
@@ -282,18 +332,34 @@ export const StudentImportantInformation: React.FC = () => {
                 </button>
                 <button
                   type="button"
-                  onClick={() => handlePrint(activeStudentToView)}
-                  className="px-4 py-2 text-xs font-semibold text-pink-200 bg-pink-950/40 hover:bg-pink-900/60 border border-pink-500/30 rounded-xl transition-all flex items-center gap-1.5 cursor-pointer"
+                  disabled={Boolean(isExporting)}
+                  onClick={() => handleExportPdf(activeStudentToView)}
+                  className="px-4 py-2 text-xs font-semibold text-white bg-gradient-to-r from-pink-600 to-purple-600 hover:from-pink-500 hover:to-purple-500 rounded-xl transition-all shadow-md shadow-pink-600/30 flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
                 >
-                  <Printer className="w-3.5 h-3.5 text-pink-400" />
-                  <span>Print My Form</span>
+                  {isExporting === (activeStudentToView.id || (activeStudentToView as any)._id) ? (
+                    <>
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      <span>Generating PDF...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Download className="w-3.5 h-3.5" />
+                      <span>Export My Form (PDF)</span>
+                    </>
+                  )}
                 </button>
               </>
             )}
           </div>
         </div>
 
-        {/* Global Print Error Alert */}
+        {/* Global Success / Error Alerts */}
+        {exportSuccess && (
+          <div className="p-3.5 rounded-xl bg-emerald-950/50 border border-emerald-500/40 text-xs text-emerald-200 flex items-center gap-2">
+            <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+            <span>{exportSuccess}</span>
+          </div>
+        )}
         {printError && (
           <div className="p-3.5 rounded-xl bg-red-950/50 border border-red-500/40 text-xs text-red-200 flex items-center gap-2">
             <AlertCircle className="w-4 h-4 text-red-400 shrink-0" />
@@ -417,11 +483,21 @@ export const StudentImportantInformation: React.FC = () => {
                               </button>
                               <button
                                 type="button"
-                                onClick={() => handlePrint(st)}
-                                className="px-2.5 py-1 text-[11px] font-semibold text-pink-300 hover:text-white bg-pink-950/40 hover:bg-pink-900/60 border border-pink-500/30 rounded-lg flex items-center gap-1 cursor-pointer"
+                                disabled={Boolean(isExporting)}
+                                onClick={() => handleExportPdf(st)}
+                                className="px-2.5 py-1 text-[11px] font-semibold text-pink-300 hover:text-white bg-pink-950/40 hover:bg-pink-900/60 border border-pink-500/30 rounded-lg flex items-center gap-1 cursor-pointer disabled:opacity-50"
                               >
-                                <Printer className="w-3.5 h-3.5" />
-                                <span>Print Form</span>
+                                {isExporting === (st.id || (st as any)._id) ? (
+                                  <>
+                                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                                    <span>Exporting...</span>
+                                  </>
+                                ) : (
+                                  <>
+                                    <Download className="w-3.5 h-3.5" />
+                                    <span>Export Form</span>
+                                  </>
+                                )}
                               </button>
                             </div>
                           </td>
@@ -502,11 +578,21 @@ export const StudentImportantInformation: React.FC = () => {
                   </button>
                   <button
                     type="button"
-                    onClick={() => handlePrint(activeStudentToView)}
-                    className="px-4 py-2 text-xs font-semibold text-slate-200 hover:text-white bg-white/5 hover:bg-white/10 border border-white/10 rounded-xl transition-all flex items-center gap-1.5 cursor-pointer"
+                    disabled={Boolean(isExporting)}
+                    onClick={() => handleExportPdf(activeStudentToView)}
+                    className="px-4 py-2 text-xs font-semibold text-white bg-gradient-to-r from-pink-600 to-purple-600 hover:from-pink-500 hover:to-purple-500 rounded-xl transition-all shadow-md shadow-pink-600/30 flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
                   >
-                    <Printer className="w-3.5 h-3.5" />
-                    <span>Print Form</span>
+                    {isExporting === (activeStudentToView.id || (activeStudentToView as any)._id) ? (
+                      <>
+                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                        <span>Generating PDF...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Download className="w-3.5 h-3.5" />
+                        <span>Export Form (PDF)</span>
+                      </>
+                    )}
                   </button>
                 </div>
               )}
@@ -1249,11 +1335,21 @@ export const StudentImportantInformation: React.FC = () => {
                   </button>
                   <button
                     type="button"
-                    onClick={() => handlePrint(selectedStudent)}
-                    className="px-4 py-2 text-xs font-semibold text-white bg-pink-600 hover:bg-pink-500 rounded-xl flex items-center gap-2 cursor-pointer shadow-md shadow-pink-600/30"
+                    disabled={Boolean(isExporting)}
+                    onClick={() => handleExportPdf(selectedStudent)}
+                    className="px-4 py-2 text-xs font-semibold text-white bg-gradient-to-r from-pink-600 to-purple-600 hover:from-pink-500 hover:to-purple-500 rounded-xl flex items-center gap-2 cursor-pointer shadow-md shadow-pink-600/30 disabled:opacity-50"
                   >
-                    <Printer className="w-4 h-4" />
-                    <span>Print Student Form</span>
+                    {isExporting === (selectedStudent.id || (selectedStudent as any)._id) ? (
+                      <>
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                        <span>Generating PDF...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Download className="w-4 h-4" />
+                        <span>Export Student Form (PDF)</span>
+                      </>
+                    )}
                   </button>
                 </div>
               </div>

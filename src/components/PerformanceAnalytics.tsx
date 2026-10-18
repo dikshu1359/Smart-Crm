@@ -53,6 +53,26 @@ export const PerformanceAnalytics: React.FC = () => {
   const isAdmin = currentUser.role === 'admin';
   const isTeacher = currentUser.role === 'teacher';
 
+  // Strictly filter authorized classes: teachers only see their allocated classes
+  const authorizedClasses = React.useMemo(() => {
+    if (isTeacher) {
+      const uId = String(currentUser.id || (currentUser as any)._id);
+      const assignedIds = (currentUser.assignedClassIds || []).map(String);
+      return classes.filter((c) => {
+        const cId = String(c.id || (c as any)._id);
+        const isPrimary = String(c.primaryTeacherId) === uId;
+        const isAssigned = assignedIds.includes(cId);
+        return isPrimary || isAssigned;
+      });
+    }
+    return classes;
+  }, [classes, currentUser, isTeacher]);
+
+  const filteredAttendanceClasses = React.useMemo(() => {
+    if (attendanceClassFilter === 'all') return authorizedClasses;
+    return authorizedClasses.filter((c) => String(c.id || (c as any)._id) === attendanceClassFilter);
+  }, [authorizedClasses, attendanceClassFilter]);
+
   const studentPerformance = analytics?.studentPerformance || [];
   const teacherPerformance = analytics?.teacherPerformance || [];
   const classPerformance = analytics?.classPerformance || [];
@@ -423,6 +443,21 @@ export const PerformanceAnalytics: React.FC = () => {
                 <BarChart3 className="w-4 h-4 text-purple-400" />
                 <span>Class Cohort Attendance Breakdown</span>
               </h2>
+              <div className="flex items-center gap-2">
+                <Filter className="w-3.5 h-3.5 text-slate-400" />
+                <select
+                  value={attendanceClassFilter}
+                  onChange={(e) => setAttendanceClassFilter(e.target.value)}
+                  className="bg-black/30 border border-white/10 rounded-xl px-3 py-1.5 text-xs text-white focus:outline-none focus:border-purple-500 cursor-pointer"
+                >
+                  <option value="all">All Cohorts ({authorizedClasses.length})</option>
+                  {authorizedClasses.map((c) => (
+                    <option key={c.id || (c as any)._id} value={c.id || (c as any)._id}>
+                      {c.name} ({c.gradeLevel} - {c.section})
+                    </option>
+                  ))}
+                </select>
+              </div>
             </div>
 
             <div className="overflow-x-auto">
@@ -437,40 +472,48 @@ export const PerformanceAnalytics: React.FC = () => {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-white/10">
-                  {classes.map((c) => {
-                    const classSessions = attendanceSessions.filter(
-                      (s) => String(s.classId) === String(c.id || (c as any)._id)
-                    );
-                    let pTotal = 0;
-                    let stTotal = 0;
-                    classSessions.forEach((s) => {
-                      pTotal += s.presentCount || 0;
-                      stTotal += s.totalStudents || 0;
-                    });
-                    const rate = stTotal > 0 ? Math.round((pTotal / stTotal) * 100) : 100;
+                  {filteredAttendanceClasses.length === 0 ? (
+                    <tr>
+                      <td colSpan={5} className="py-6 text-center text-slate-400">
+                        No class attendance records match the selected cohort filter.
+                      </td>
+                    </tr>
+                  ) : (
+                    filteredAttendanceClasses.map((c) => {
+                      const classSessions = attendanceSessions.filter(
+                        (s) => String(s.classId) === String(c.id || (c as any)._id)
+                      );
+                      let pTotal = 0;
+                      let stTotal = 0;
+                      classSessions.forEach((s) => {
+                        pTotal += s.presentCount || 0;
+                        stTotal += s.totalStudents || 0;
+                      });
+                      const rate = stTotal > 0 ? Math.round((pTotal / stTotal) * 100) : 100;
 
-                    return (
-                      <tr key={c.id || (c as any)._id} className="hover:bg-white/[0.02]">
-                        <td className="py-3 px-4 font-semibold text-white">{c.name}</td>
-                        <td className="py-3 px-4 text-slate-300">
-                          {c.gradeLevel} - {c.section}
-                        </td>
-                        <td className="py-3 px-4 font-mono text-slate-300">
-                          {c.studentIds?.length || 0}
-                        </td>
-                        <td className="py-3 px-4 font-mono text-slate-300">{classSessions.length}</td>
-                        <td className="py-3 px-4">
-                          <span
-                            className={`font-mono font-bold ${
-                              rate >= 80 ? 'text-emerald-400' : rate >= 65 ? 'text-amber-400' : 'text-rose-400'
-                            }`}
-                          >
-                            {rate}%
-                          </span>
-                        </td>
-                      </tr>
-                    );
-                  })}
+                      return (
+                        <tr key={c.id || (c as any)._id} className="hover:bg-white/[0.02]">
+                          <td className="py-3 px-4 font-semibold text-white">{c.name}</td>
+                          <td className="py-3 px-4 text-slate-300">
+                            {c.gradeLevel} - {c.section}
+                          </td>
+                          <td className="py-3 px-4 font-mono text-slate-300">
+                            {c.studentIds?.length || 0}
+                          </td>
+                          <td className="py-3 px-4 font-mono text-slate-300">{classSessions.length}</td>
+                          <td className="py-3 px-4">
+                            <span
+                              className={`font-mono font-bold ${
+                                rate >= 80 ? 'text-emerald-400' : rate >= 65 ? 'text-amber-400' : 'text-rose-400'
+                              }`}
+                            >
+                              {rate}%
+                            </span>
+                          </td>
+                        </tr>
+                      );
+                    })
+                  )}
                 </tbody>
               </table>
             </div>

@@ -42,7 +42,7 @@ async function startServer() {
         middlewareMode: true,
         hmr: {
           server: httpServer,
-          clientPort: isCloudEnv ? 443 : 3000,
+          clientPort: isCloudEnv ? 443 : undefined,
         },
       },
       appType: 'spa',

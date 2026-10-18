@@ -22,6 +22,7 @@ import {
   Eye,
   Printer,
   FileSpreadsheet,
+  Download,
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { SchoolClass, TenantUser, Assignment, StudentSubmission, StudentMarksRecord } from '../types/crm';
@@ -739,8 +740,8 @@ export const DashboardOverview: React.FC = () => {
                               onClick={() => setActiveTab('student-data')}
                               className="px-2.5 py-1 text-[11px] font-semibold text-pink-300 hover:text-white bg-pink-950/40 hover:bg-pink-900/60 border border-pink-500/30 rounded-lg inline-flex items-center gap-1 cursor-pointer"
                             >
-                              <Printer className="w-3 h-3" />
-                              <span>Print Form</span>
+                              <Download className="w-3 h-3" />
+                              <span>Export Form</span>
                             </button>
                           </td>
                         </tr>
