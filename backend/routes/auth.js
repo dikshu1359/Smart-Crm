@@ -68,6 +68,7 @@ router.post('/register-institution', async (req, res) => {
         databaseName,
         institutionId: registryEntry._id.toString(),
         institutionName: registryEntry.institutionName,
+        campusCode: registryEntry.campusCode || 'CAMPUS-01',
       },
     });
   } catch (error) {
@@ -101,6 +102,8 @@ router.post('/login', async (req, res) => {
     }
 
     const { user, token, institutionName } = authResult;
+    const masterDb = await dbManager.getMasterDB();
+    const inst = await masterDb.Institution.findOne({ databaseName: user.databaseName });
 
     // Log login activity
     await dbManager.logActivity({
@@ -132,6 +135,7 @@ router.post('/login', async (req, res) => {
       tenant: {
         databaseName: user.databaseName,
         institutionName: institutionName || '',
+        campusCode: inst?.campusCode || 'CAMPUS-01',
       },
     });
   } catch (error) {
@@ -168,6 +172,7 @@ router.get('/me', tenantAuth, async (req, res) => {
         databaseName: req.databaseName,
         institutionId: inst?._id.toString() || '',
         institutionName: inst?.institutionName || req.user.institutionName || '',
+        campusCode: inst?.campusCode || 'CAMPUS-01',
         userCount,
         classCount,
         assignmentCount,

@@ -27,6 +27,7 @@ interface AppContextValue {
     databaseName: string;
     institutionName: string;
     institutionId?: string;
+    campusCode?: string;
   } | null;
   currentView: AppView;
   selectedRole: UserRole | null;
@@ -120,6 +121,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     databaseName: string;
     institutionName: string;
     institutionId?: string;
+    campusCode?: string;
   } | null>(null);
 
   const [currentView, setViewInternal] = useState<AppView>('landing');

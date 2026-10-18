@@ -6,6 +6,8 @@ import dotenv from 'dotenv';
 
 dotenv.config();
 
+mongoose.set('bufferCommands', false);
+
 const JWT_SECRET = process.env.JWT_SECRET || 'smart-institutional-crm-super-secret-jwt-key';
 const MONGODB_URI = process.env.MONGODB_URI;
 
@@ -303,6 +305,33 @@ class InMemoryCollection {
     this.documents[index] = updated;
 
     return wrapDocument(options.new ? updated : existing, this);
+  }
+
+  async findOneAndUpdate(query = {}, update = {}, options = { new: true }) {
+    let doc = this.documents.find((d) => matchFilter(d, query));
+    if (!doc) {
+      if (options.upsert) {
+        let initialDoc = { ...query };
+        if (update.$set) Object.assign(initialDoc, update.$set);
+        for (const [k, v] of Object.entries(update)) {
+          if (!k.startsWith('$')) initialDoc[k] = v;
+        }
+        return this.create(initialDoc);
+      }
+      return null;
+    }
+    return this.findByIdAndUpdate(doc._id || doc.id, update, options);
+  }
+
+  async findOneAndDelete(query = {}) {
+    const doc = this.documents.find((d) => matchFilter(d, query));
+    if (!doc) return null;
+    return this.findByIdAndDelete(doc._id || doc.id);
+  }
+
+  async updateOne(query = {}, update = {}, options = {}) {
+    const res = await this.findOneAndUpdate(query, update, options);
+    return { matchedCount: res ? 1 : 0, modifiedCount: res ? 1 : 0 };
   }
 
   async findByIdAndDelete(id) {

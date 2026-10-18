@@ -81,6 +81,17 @@ app.use('/api/*', (req, res) => {
 
 // Error handling middleware
 app.use((err, req, res, next) => {
+  if (
+    err.name === 'MongooseError' ||
+    err.name === 'MongoNetworkError' ||
+    (err.message && err.message.includes('buffering timed out'))
+  ) {
+    console.warn('[AI Studio] Database offline — returning mock empty response');
+    if (req.method === 'GET') {
+      return res.json(req.path.endsWith('s') || req.path.endsWith('s/') ? [] : {});
+    }
+    return res.status(503).json({ error: 'Service temporarily unavailable (database offline)' });
+  }
   console.error('Unhandled Server Error:', err);
   res.status(500).json({ error: 'InternalServerError', message: err.message || 'An unexpected error occurred.' });
 });
