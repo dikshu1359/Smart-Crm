@@ -16,7 +16,10 @@ router.use(tenantAuth);
 async function getAuthorizedTeacherIdsForStudent(tenantDb, studentId) {
   const student = await tenantDb.User.findById(studentId);
   const studentClassId = student?.assignedClassId || (student?.assignedClassIds && student.assignedClassIds[0]);
-  if (!studentClassId) return new Set();
+  if (!studentClassId) {
+    const allTeachers = await tenantDb.User.find({ role: 'teacher', status: 'active' });
+    return new Set(allTeachers.map((t) => String(t._id || t.id)));
+  }
 
   const studentClass = await tenantDb.Class.findById(studentClassId).catch(() => null);
   const primaryTeacherId = studentClass?.primaryTeacherId;
@@ -30,11 +33,18 @@ async function getAuthorizedTeacherIdsForStudent(tenantDb, studentId) {
   const scheduleSlots = await tenantDb.Schedule.find({ classId: studentClassId });
   const scheduledTeacherIds = scheduleSlots.map((s) => String(s.teacherId)).filter(Boolean);
 
-  return new Set([
+  const teacherIds = new Set([
     ...(primaryTeacherId ? [String(primaryTeacherId)] : []),
     ...classTeachers.map((t) => String(t._id || t.id)),
     ...scheduledTeacherIds,
   ]);
+
+  if (teacherIds.size === 0) {
+    const fallback = await tenantDb.User.find({ role: 'teacher', status: 'active' });
+    return new Set(fallback.map((t) => String(t._id || t.id)));
+  }
+
+  return teacherIds;
 }
 
 /**

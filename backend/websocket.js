@@ -140,12 +140,33 @@ export function setupWebSocketServer(httpServer) {
           return;
         }
 
+        // Call response from recipient via WebSocket
+        if (event === 'call:respond') {
+          const { callId, action, answerSdp } = payload || {};
+          if (callId && activeCalls.has(callId)) {
+            const call = activeCalls.get(callId);
+            if (String(call.recipientId) === String(ws.userId)) {
+              if (action === 'answer') {
+                call.status = 'connected';
+                call.connectedAt = new Date().toISOString();
+                if (answerSdp) call.answerSdp = answerSdp;
+                broadcastToUser(call.callerId, 'call:answered', call);
+                broadcastToUser(call.recipientId, 'call:connected', call);
+              } else if (action === 'decline') {
+                terminateCallSession(call, 'declined', ws.userId);
+              }
+            }
+          }
+          return;
+        }
+
         // End call initiated by client
         if (event === 'call:end') {
           const { callId } = payload || {};
           if (callId && activeCalls.has(callId)) {
             const call = activeCalls.get(callId);
-            terminateCallSession(call, 'ended', ws.userId);
+            const finalStatus = call.status === 'connected' ? 'completed' : 'missed';
+            terminateCallSession(call, finalStatus, ws.userId);
           }
           return;
         }

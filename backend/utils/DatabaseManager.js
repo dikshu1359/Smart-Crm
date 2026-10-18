@@ -1134,15 +1134,26 @@ class DatabaseManager {
     const query = (usernameOrEmail || '').trim().toLowerCase();
     if (!query) return null;
 
-    // Direct search in requested tenant if specified
+    // Direct search in requested tenant or institution if specified
     if (requestedDatabaseName) {
-      const tenant = await this.getTenantDB(requestedDatabaseName);
+      let targetDbName = requestedDatabaseName;
+      let matchedInst = await this.masterDb.Institution.findOne({ databaseName: targetDbName });
+      if (!matchedInst) {
+        matchedInst = await this.masterDb.Institution.findOne({
+          institutionName: { $regex: new RegExp(`^${requestedDatabaseName.trim()}$`, 'i') },
+        });
+        if (matchedInst) {
+          targetDbName = matchedInst.databaseName;
+        }
+      }
+
+      const tenant = await this.getTenantDB(targetDbName);
       if (tenant) {
         const user = await tenant.User.findOne({
           $or: [{ username: query }, { email: query }],
         });
         if (user && bcrypt.compareSync(password, user.passwordHash)) {
-          const inst = await this.masterDb.Institution.findOne({ databaseName: requestedDatabaseName });
+          const inst = matchedInst || (await this.masterDb.Institution.findOne({ databaseName: targetDbName }));
           const token = jwt.sign(
             {
               id: user._id.toString(),
@@ -1150,7 +1161,7 @@ class DatabaseManager {
               fullName: user.fullName,
               email: user.email,
               role: user.role,
-              databaseName: requestedDatabaseName,
+              databaseName: targetDbName,
               institutionName: inst?.institutionName || '',
             },
             JWT_SECRET,

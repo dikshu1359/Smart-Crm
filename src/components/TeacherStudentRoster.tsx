@@ -19,6 +19,7 @@ import {
   MapPin,
   Eye,
   GraduationCap,
+  RefreshCw,
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { useApp } from '../context/AppContext';
@@ -327,9 +328,16 @@ export const TeacherStudentRoster: React.FC = () => {
   };
 
   // Process Roster File Upload
+  // Process Roster File Upload
   const handleRosterFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
+
+    // Check file size (max 10MB)
+    if (file.size > 10 * 1024 * 1024) {
+      setImportStatus({ success: false, message: 'File size exceeds maximum limit of 10MB.' });
+      return;
+    }
 
     setImportStatus(null);
     setImportFileName(file.name);
@@ -337,8 +345,15 @@ export const TeacherStudentRoster: React.FC = () => {
     const reader = new FileReader();
     reader.onload = (evt) => {
       try {
-        const data = evt.target?.result;
-        const workbook = XLSX.read(data, { type: 'binary' });
+        const buffer = evt.target?.result as ArrayBuffer;
+        const data = new Uint8Array(buffer);
+        const workbook = XLSX.read(data, { type: 'array' });
+        
+        if (!workbook.SheetNames || workbook.SheetNames.length === 0) {
+          setImportStatus({ success: false, message: 'The uploaded spreadsheet contains no readable sheets.' });
+          return;
+        }
+
         const sheet = workbook.Sheets[workbook.SheetNames[0]];
         const rawJson: any[] = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '' });
 
@@ -347,50 +362,125 @@ export const TeacherStudentRoster: React.FC = () => {
           return;
         }
 
-        const headers: string[] = rawJson[0].map((h: any) => String(h).trim().toLowerCase());
-        const rollIdx = headers.findIndex((h) => h.includes('roll') || h.includes('id') || h.includes('number'));
-        const nameIdx = headers.findIndex((h) => h.includes('name') || h.includes('student'));
-        const emailIdx = headers.findIndex((h) => h.includes('email') || h.includes('mail'));
-        const phoneIdx = headers.findIndex((h) => h.includes('phone') || h.includes('mobile'));
+        // Find header row dynamically
+        let headerRowIdx = -1;
+        let rollIdx = -1;
+        let nameIdx = -1;
+        let emailIdx = -1;
+        let phoneIdx = -1;
+
+        for (let r = 0; r < Math.min(rawJson.length, 10); r++) {
+          const row = rawJson[r];
+          if (!Array.isArray(row)) continue;
+          const headers = row.map((h: any) => String(h || '').trim().toLowerCase());
+          
+          const rIdx = headers.findIndex((h) => h.includes('roll') || h.includes('id') || h === 'roll_no' || h === 'roll number');
+          const nIdx = headers.findIndex((h) => h.includes('name') || h.includes('student') || h === 'full name');
+          
+          if (rIdx !== -1 && nIdx !== -1) {
+            headerRowIdx = r;
+            rollIdx = rIdx;
+            nameIdx = nIdx;
+            emailIdx = headers.findIndex((h) => h.includes('email') || h.includes('mail'));
+            phoneIdx = headers.findIndex((h) => h.includes('phone') || h.includes('mobile') || h.includes('contact'));
+            break;
+          }
+        }
+
+        if (headerRowIdx === -1) {
+          // Fallback to row 0 if columns exist
+          const headers: string[] = rawJson[0].map((h: any) => String(h).trim().toLowerCase());
+          rollIdx = headers.findIndex((h) => h.includes('roll') || h.includes('id') || h.includes('number'));
+          nameIdx = headers.findIndex((h) => h.includes('name') || h.includes('student'));
+          emailIdx = headers.findIndex((h) => h.includes('email') || h.includes('mail'));
+          phoneIdx = headers.findIndex((h) => h.includes('phone') || h.includes('mobile'));
+          if (rollIdx === -1 && headers.length > 0) rollIdx = 0;
+          if (nameIdx === -1 && headers.length > 1) nameIdx = 1;
+          headerRowIdx = 0;
+        }
 
         if (rollIdx === -1 || nameIdx === -1) {
-          setImportStatus({ success: false, message: 'Could not find required columns: "Roll Number" and "Student Name".' });
+          setImportStatus({ success: false, message: 'Could not find required columns: "Roll Number" and "Student Name". Please use the sample template.' });
           return;
         }
 
+        const existingRolls = new Set(
+          users.filter((u) => u.role === 'student' && u.rollNumber).map((u) => String(u.rollNumber).trim().toLowerCase())
+        );
+        const seenInFile = new Set<string>();
+
         const rows: any[] = [];
-        for (let i = 1; i < rawJson.length; i++) {
+        for (let i = headerRowIdx + 1; i < rawJson.length; i++) {
           const row = rawJson[i];
-          if (!row || row.length === 0 || !row[rollIdx] || !row[nameIdx]) continue;
+          if (!row || row.length === 0 || row.every((c: any) => c === '')) continue;
+          
+          const roll = String(row[rollIdx] || '').trim();
+          const name = String(row[nameIdx] || '').trim();
+          if (!roll && !name) continue;
+
+          let status: 'valid' | 'warning' | 'error' = 'valid';
+          let note = 'Ready to import';
+
+          if (!roll) {
+            status = 'error';
+            note = 'Missing Roll Number';
+          } else if (!name) {
+            status = 'error';
+            note = 'Missing Student Name';
+          } else if (seenInFile.has(roll.toLowerCase())) {
+            status = 'error';
+            note = `Duplicate Roll "${roll}" in file`;
+          } else if (existingRolls.has(roll.toLowerCase())) {
+            status = 'warning';
+            note = 'Existing student in institution; will be enrolled';
+            seenInFile.add(roll.toLowerCase());
+          } else {
+            seenInFile.add(roll.toLowerCase());
+          }
+
           rows.push({
-            rollNumber: String(row[rollIdx]).trim(),
-            fullName: String(row[nameIdx]).trim(),
-            email: emailIdx !== -1 ? String(row[emailIdx]).trim() : undefined,
-            phone: phoneIdx !== -1 ? String(row[phoneIdx]).trim() : undefined,
+            rowNum: i + 1,
+            rollNumber: roll,
+            fullName: name,
+            email: emailIdx !== -1 && row[emailIdx] ? String(row[emailIdx]).trim() : undefined,
+            phone: phoneIdx !== -1 && row[phoneIdx] ? String(row[phoneIdx]).trim() : undefined,
+            status,
+            validationMessage: note,
           });
+        }
+
+        if (rows.length === 0) {
+          setImportStatus({ success: false, message: 'No valid data rows found in the spreadsheet.' });
+          return;
         }
 
         setParsedImportRows(rows);
       } catch (err: any) {
-        setImportStatus({ success: false, message: `Failed to parse file: ${err.message}` });
+        setImportStatus({ success: false, message: `Failed to parse spreadsheet file: ${err.message || 'Unknown error'}` });
       }
     };
-    reader.readAsBinaryString(file);
+    reader.readAsArrayBuffer(file);
     e.target.value = '';
   };
 
   const handleExecuteImport = async () => {
     if (!selectedClassId || parsedImportRows.length === 0) return;
+    const validRows = parsedImportRows.filter((r) => r.status !== 'error');
+    if (validRows.length === 0) {
+      setImportStatus({ success: false, message: 'No valid student records to import. Please resolve error rows.' });
+      return;
+    }
+
     setIsImporting(true);
     setImportStatus(null);
 
-    const res = await importClassRoster(selectedClassId, parsedImportRows);
+    const res = await importClassRoster(selectedClassId, validRows);
     setIsImporting(false);
 
     if (res.ok) {
       setImportStatus({
         success: true,
-        message: res.message || `Successfully imported ${parsedImportRows.length} students into ${selectedClass?.name}.`,
+        message: res.message || `Successfully imported ${validRows.length} students into ${selectedClass?.name}.`,
       });
       setParsedImportRows([]);
       setImportFileName(null);
@@ -804,26 +894,94 @@ export const TeacherStudentRoster: React.FC = () => {
                     />
                   </label>
                   {importFileName && (
-                    <span className="text-[11px] text-emerald-400 mt-2 block font-mono">
-                      Selected: {importFileName} ({parsedImportRows.length} valid students)
-                    </span>
+                    <div className="space-y-3 mt-3 text-left">
+                      <div className="flex items-center justify-between text-[11px] font-mono px-1">
+                        <span className="text-slate-300 font-bold truncate max-w-[200px]">{importFileName}</span>
+                        <div className="flex gap-2">
+                          <span className="text-emerald-400 font-semibold">
+                            {parsedImportRows.filter((r) => r.status !== 'error').length} Valid
+                          </span>
+                          {parsedImportRows.filter((r) => r.status === 'error').length > 0 && (
+                            <span className="text-red-400 font-semibold">
+                              {parsedImportRows.filter((r) => r.status === 'error').length} Errors
+                            </span>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Mini Preview Table */}
+                      <div className="max-h-48 overflow-y-auto rounded-xl border border-white/10 bg-black/40 text-xs">
+                        <table className="w-full text-left border-collapse">
+                          <thead className="sticky top-0 bg-slate-900 border-b border-white/10 text-slate-400 text-[11px]">
+                            <tr>
+                              <th className="py-1.5 px-3">Roll</th>
+                              <th className="py-1.5 px-3">Student Name</th>
+                              <th className="py-1.5 px-2 text-center">Status</th>
+                              <th className="py-1.5 px-3">Validation Note</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-white/5 font-mono text-[11px]">
+                            {parsedImportRows.map((row) => (
+                              <tr
+                                key={row.rowNum}
+                                className={row.status === 'error' ? 'bg-red-500/10 text-red-300' : 'text-slate-300'}
+                              >
+                                <td className="py-1 px-3 font-bold">{row.rollNumber || '-'}</td>
+                                <td className="py-1 px-3 truncate max-w-[120px] font-sans">{row.fullName || '-'}</td>
+                                <td className="py-1 px-2 text-center">
+                                  <span
+                                    className={`px-1.5 py-0.5 rounded text-[10px] ${
+                                      row.status === 'valid'
+                                        ? 'bg-emerald-500/20 text-emerald-300'
+                                        : row.status === 'warning'
+                                        ? 'bg-amber-500/20 text-amber-300'
+                                        : 'bg-red-500/20 text-red-300 font-bold'
+                                    }`}
+                                  >
+                                    {row.status}
+                                  </span>
+                                </td>
+                                <td className="py-1 px-3 text-[10px] truncate max-w-[150px] font-sans">
+                                  {row.validationMessage}
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
                   )}
                 </div>
               </div>
 
               <div className="flex justify-end gap-2 pt-2 border-t border-white/10">
                 <button
-                  onClick={() => setShowImportModal(false)}
+                  type="button"
+                  onClick={() => {
+                    setShowImportModal(false);
+                    setParsedImportRows([]);
+                    setImportFileName(null);
+                  }}
                   className="px-4 py-2 rounded-xl text-xs font-semibold bg-white/5 hover:bg-white/10 text-slate-300 cursor-pointer"
                 >
                   Cancel
                 </button>
                 <button
+                  type="button"
                   onClick={handleExecuteImport}
-                  disabled={parsedImportRows.length === 0 || isImporting}
-                  className="px-4 py-2 rounded-xl text-xs font-semibold bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 text-white disabled:opacity-50 cursor-pointer"
+                  disabled={parsedImportRows.filter((r) => r.status !== 'error').length === 0 || isImporting}
+                  className="px-4 py-2 rounded-xl text-xs font-semibold bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 text-white disabled:opacity-50 cursor-pointer flex items-center gap-2"
                 >
-                  {isImporting ? 'Importing...' : `Import ${parsedImportRows.length} Students`}
+                  {isImporting ? (
+                    <>
+                      <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                      <span>Importing...</span>
+                    </>
+                  ) : (
+                    <span>
+                      Import {parsedImportRows.filter((r) => r.status !== 'error').length} Valid Students
+                    </span>
+                  )}
                 </button>
               </div>
             </div>

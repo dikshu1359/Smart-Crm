@@ -78,7 +78,7 @@ export const Navigation: React.FC<NavigationProps> = ({ mobileOpen, setMobileOpe
       id: 'attendance',
       label: currentUser.role === 'student' ? 'My Attendance' : 'Student Attendance',
       icon: CheckCircle2,
-      roles: ['teacher', 'student'],
+      roles: ['admin', 'teacher', 'student'],
     },
     {
       id: 'student-data',
@@ -90,7 +90,7 @@ export const Navigation: React.FC<NavigationProps> = ({ mobileOpen, setMobileOpe
       id: 'assignments',
       label: currentUser.role === 'student' ? 'My Assignments' : 'Assignment Management',
       icon: FileCheck2,
-      roles: ['teacher', 'student'],
+      roles: ['admin', 'teacher', 'student'],
     },
     {
       id: 'quizzes',
@@ -100,15 +100,15 @@ export const Navigation: React.FC<NavigationProps> = ({ mobileOpen, setMobileOpe
     },
     {
       id: 'roster',
-      label: 'Student Roster',
+      label: currentUser.role === 'admin' ? 'Import Student Roster' : 'Student Roster',
       icon: Users,
-      roles: ['teacher'],
+      roles: ['admin', 'teacher'],
     },
     {
       id: 'marks',
       label: currentUser.role === 'student' ? 'My Marks & Gradebook' : 'Marks Spreadsheet',
       icon: Table,
-      roles: ['teacher', 'student'],
+      roles: ['admin', 'teacher', 'student'],
     },
     {
       id: 'schedule',

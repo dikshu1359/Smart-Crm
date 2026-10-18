@@ -29,6 +29,9 @@ export const RoleSelectionPage: React.FC<RoleSelectionProps> = ({ initialRole })
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [selectedDb, setSelectedDb] = useState('');
+  const [adminInstitutionName, setAdminInstitutionName] = useState(() => {
+    return typeof window !== 'undefined' ? localStorage.getItem('smart_crm_registered_institution') || '' : '';
+  });
   const [loginError, setLoginError] = useState('');
   const [loginLoading, setLoginLoading] = useState(false);
 
@@ -52,7 +55,8 @@ export const RoleSelectionPage: React.FC<RoleSelectionProps> = ({ initialRole })
     }
 
     setLoginLoading(true);
-    const res = await login(username.trim(), password.trim(), selectedDb || undefined);
+    const targetScope = role === 'admin' ? (adminInstitutionName.trim() || undefined) : (selectedDb || undefined);
+    const res = await login(username.trim(), password.trim(), targetScope);
     setLoginLoading(false);
 
     if (!res.ok) {
@@ -106,6 +110,12 @@ export const RoleSelectionPage: React.FC<RoleSelectionProps> = ({ initialRole })
 
     if (!res.ok) {
       setRegError(res.message);
+    } else {
+      const savedInstName = (res as any).tenant?.institutionName || instName.trim();
+      setAdminInstitutionName(savedInstName);
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('smart_crm_registered_institution', savedInstName);
+      }
     }
   };
 
@@ -455,24 +465,42 @@ export const RoleSelectionPage: React.FC<RoleSelectionProps> = ({ initialRole })
                   />
                 </div>
 
-                {institutions.length > 0 && (
+                {role === 'admin' ? (
                   <div>
                     <label className="block text-xs font-semibold text-slate-300 mb-1.5">
-                      Institution (Optional Target Scope)
+                      Institution Name
                     </label>
-                    <select
-                      value={selectedDb}
-                      onChange={(e) => setSelectedDb(e.target.value)}
+                    <input
+                      type="text"
+                      value={adminInstitutionName}
+                      onChange={(e) => setAdminInstitutionName(e.target.value)}
+                      placeholder="Enter your institution's name"
                       className="w-full px-3.5 py-2.5 text-xs rounded-xl bg-black/40 border border-white/10 text-white focus:outline-none focus:border-purple-500"
-                    >
-                      <option value="">Auto-Detect via Cross-Database Auth</option>
-                      {institutions.map((inst) => (
-                        <option key={inst.databaseName} value={inst.databaseName}>
-                          {inst.institutionName}
-                        </option>
-                      ))}
-                    </select>
+                    />
+                    <p className="text-[11px] text-slate-400 mt-1">
+                      Enter the registered institution name associated with this administrator account.
+                    </p>
                   </div>
+                ) : (
+                  institutions.length > 0 && (
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-300 mb-1.5">
+                        Institution (Optional Target Scope)
+                      </label>
+                      <select
+                        value={selectedDb}
+                        onChange={(e) => setSelectedDb(e.target.value)}
+                        className="w-full px-3.5 py-2.5 text-xs rounded-xl bg-black/40 border border-white/10 text-white focus:outline-none focus:border-purple-500"
+                      >
+                        <option value="">Auto-Detect via Cross-Database Auth</option>
+                        {institutions.map((inst) => (
+                          <option key={inst.databaseName} value={inst.databaseName}>
+                            {inst.institutionName}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  )
                 )}
 
                 {loginError && (

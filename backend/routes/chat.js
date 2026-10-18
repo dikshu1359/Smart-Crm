@@ -18,7 +18,12 @@ function getConversationId(userId1, userId2) {
 async function getAuthorizedTeacherIdsForStudent(tenantDb, studentId) {
   const student = await tenantDb.User.findById(studentId);
   const studentClassId = student?.assignedClassId || (student?.assignedClassIds && student.assignedClassIds[0]);
-  if (!studentClassId) return new Set();
+  
+  if (!studentClassId) {
+    // If student has no class allotted yet, allow all active teachers in this institution
+    const allTeachers = await tenantDb.User.find({ role: 'teacher', status: 'active' });
+    return new Set(allTeachers.map((t) => String(t._id || t.id)));
+  }
 
   const studentClass = await tenantDb.Class.findById(studentClassId).catch(() => null);
   const primaryTeacherId = studentClass?.primaryTeacherId;
@@ -32,26 +37,43 @@ async function getAuthorizedTeacherIdsForStudent(tenantDb, studentId) {
   const scheduleSlots = await tenantDb.Schedule.find({ classId: studentClassId });
   const scheduledTeacherIds = scheduleSlots.map((s) => String(s.teacherId)).filter(Boolean);
 
-  return new Set([
+  const teacherIds = new Set([
     ...(primaryTeacherId ? [String(primaryTeacherId)] : []),
     ...classTeachers.map((t) => String(t._id || t.id)),
     ...scheduledTeacherIds,
   ]);
+
+  if (teacherIds.size === 0) {
+    const fallbackTeachers = await tenantDb.User.find({ role: 'teacher', status: 'active' });
+    return new Set(fallbackTeachers.map((t) => String(t._id || t.id)));
+  }
+
+  return teacherIds;
 }
 
 /**
  * GET /api/chat/contacts
  * Returns eligible contacts for current user based on institutional permissions:
- * - Student: ONLY teachers who are actually assigned to teach that student
- * - Teacher: admins, fellow faculty members (collaboration), and students enrolled in teacher's assigned classes
+ * - Student: teachers who are assigned to teach that student or active faculty
+ * - Teacher: admins, fellow faculty members, students in classes, and students who messaged them
  * - Admin: all teachers and students
  */
 router.get('/contacts', async (req, res) => {
   try {
     const role = req.user?.role || 'admin';
-    const userId = req.user?.id || req.user?._id;
+    const userId = String(req.user?.id || req.user?._id);
 
     let contacts = [];
+
+    // Find any users who already have conversation history with the current user
+    const priorMessages = await req.tenantDb.Message.find({
+      $or: [{ senderId: userId }, { recipientId: userId }],
+    });
+    const priorContactIds = new Set();
+    for (const m of priorMessages) {
+      if (String(m.senderId) !== userId) priorContactIds.add(String(m.senderId));
+      if (String(m.recipientId) !== userId) priorContactIds.add(String(m.recipientId));
+    }
 
     if (role === 'admin') {
       contacts = await req.tenantDb.User.find({
@@ -69,29 +91,46 @@ router.get('/contacts', async (req, res) => {
         new Set([...assignedClassIds, ...primaryClasses.map((c) => c._id.toString())])
       );
 
-      // Teachers see Admins, fellow Teachers (collaboration), and students from their assigned classes
+      // Teachers see Admins, fellow Teachers (collaboration), students from their assigned classes,
+      // and students with whom they have an existing conversation
+      const orConditions = [
+        { role: 'admin' },
+        { role: 'teacher' },
+      ];
+
+      if (allClassesForTeacher.length > 0) {
+        orConditions.push({ role: 'student', assignedClassId: { $in: allClassesForTeacher } });
+        orConditions.push({ role: 'student', assignedClassIds: { $in: allClassesForTeacher } });
+      } else {
+        // If teacher doesn't have classes linked yet, show all students
+        orConditions.push({ role: 'student' });
+      }
+
+      if (priorContactIds.size > 0) {
+        orConditions.push({ _id: { $in: Array.from(priorContactIds) } });
+      }
+
       contacts = await req.tenantDb.User.find({
         _id: { $ne: userId },
         status: 'active',
-        $or: [
-          { role: 'admin' },
-          { role: 'teacher' },
-          { role: 'student', assignedClassId: { $in: allClassesForTeacher } },
-          { role: 'student', assignedClassIds: { $in: allClassesForTeacher } },
-        ],
+        $or: orConditions,
       }).select('fullName username role email specialization assignedClassId photoUrl');
     } else if (role === 'student' && userId && userId !== 'system') {
-      // STUDENT PORTAL: STRICTLY ASSIGNED TEACHERS ONLY - NO ADMINS, NO OTHER STUDENTS
+      // STUDENT PORTAL: Assigned teachers and faculty with existing conversations
       const eligibleTeacherIds = await getAuthorizedTeacherIdsForStudent(req.tenantDb, userId);
+      const combinedTeacherIds = new Set([...Array.from(eligibleTeacherIds), ...Array.from(priorContactIds)]);
 
-      if (eligibleTeacherIds.size > 0) {
+      if (combinedTeacherIds.size > 0) {
         contacts = await req.tenantDb.User.find({
-          _id: { $in: Array.from(eligibleTeacherIds) },
+          _id: { $in: Array.from(combinedTeacherIds) },
           role: 'teacher',
           status: 'active',
         }).select('fullName username role email specialization assignedClassId photoUrl');
       } else {
-        contacts = [];
+        contacts = await req.tenantDb.User.find({
+          role: 'teacher',
+          status: 'active',
+        }).select('fullName username role email specialization assignedClassId photoUrl');
       }
     }
 
@@ -169,30 +208,48 @@ router.get('/messages/:recipientId', async (req, res) => {
         });
       }
       const eligibleTeacherIds = await getAuthorizedTeacherIdsForStudent(req.tenantDb, currentUserId);
-      if (!eligibleTeacherIds.has(String(recipientId))) {
-        return res.status(403).json({
-          error: 'UnauthorizedConversation',
-          message: 'You are not authorized to view messages with this teacher.',
-        });
+      if (eligibleTeacherIds.size > 0 && !eligibleTeacherIds.has(String(recipientId))) {
+        // Also check if teacher previously initiated contact
+        const priorMsg = await req.tenantDb.Message.findOne({ senderId: String(recipientId), recipientId: String(currentUserId) });
+        if (!priorMsg) {
+          return res.status(403).json({
+            error: 'UnauthorizedConversation',
+            message: 'You are not authorized to view messages with this teacher.',
+          });
+        }
       }
     } else if (currentUserRole === 'teacher' && recipient.role === 'student') {
-      // Teacher communicating with student: student must be in teacher's assigned classes
+      // Teacher communicating with student: student must be in teacher's assigned classes or existing conversation
       const teacher = await req.tenantDb.User.findById(currentUserId);
       const assignedClassIds = teacher?.assignedClassIds || [];
       const primaryClasses = await req.tenantDb.Class.find({ primaryTeacherId: String(currentUserId) });
       const allClassesForTeacher = new Set([...assignedClassIds, ...primaryClasses.map((c) => c._id.toString())]);
 
       const studentClassId = String(recipient.assignedClassId || (recipient.assignedClassIds && recipient.assignedClassIds[0]));
-      if (!allClassesForTeacher.has(studentClassId)) {
-        return res.status(403).json({
-          error: 'UnauthorizedConversation',
-          message: 'You may only view messages for students enrolled in your assigned classes.',
+      if (allClassesForTeacher.size > 0 && studentClassId && !allClassesForTeacher.has(studentClassId)) {
+        const priorMsg = await req.tenantDb.Message.findOne({
+          $or: [
+            { senderId: String(recipientId), recipientId: String(currentUserId) },
+            { senderId: String(currentUserId), recipientId: String(recipientId) },
+          ],
         });
+        if (!priorMsg) {
+          return res.status(403).json({
+            error: 'UnauthorizedConversation',
+            message: 'You may only view messages for students enrolled in your assigned classes.',
+          });
+        }
       }
     }
 
     const conversationId = getConversationId(currentUserId, recipientId);
-    const messages = await req.tenantDb.Message.find({ conversationId }).sort({ createdAt: 1 });
+    const messages = await req.tenantDb.Message.find({
+      $or: [
+        { conversationId },
+        { senderId: String(currentUserId), recipientId: String(recipientId) },
+        { senderId: String(recipientId), recipientId: String(currentUserId) },
+      ],
+    }).sort({ createdAt: 1 });
 
     // Mark messages sent to current user as read
     if (typeof req.tenantDb.Message.updateMany === 'function') {
@@ -266,25 +323,36 @@ router.post('/messages', async (req, res) => {
         });
       }
       const eligibleTeacherIds = await getAuthorizedTeacherIdsForStudent(req.tenantDb, currentUserId);
-      if (!eligibleTeacherIds.has(String(recipientId))) {
-        return res.status(403).json({
-          error: 'UnauthorizedRecipient',
-          message: 'You are only authorized to message faculty teachers allocated to your cohort.',
-        });
+      if (eligibleTeacherIds.size > 0 && !eligibleTeacherIds.has(String(recipientId))) {
+        const priorMsg = await req.tenantDb.Message.findOne({ senderId: String(recipientId), recipientId: String(currentUserId) });
+        if (!priorMsg) {
+          return res.status(403).json({
+            error: 'UnauthorizedRecipient',
+            message: 'You are only authorized to message faculty teachers allocated to your cohort.',
+          });
+        }
       }
     } else if (currentUserRole === 'teacher' && recipient.role === 'student') {
-      // Teacher messaging student: must belong to allocated class
+      // Teacher messaging student: must belong to allocated class or prior contact
       const teacher = await req.tenantDb.User.findById(currentUserId);
       const assignedClassIds = teacher?.assignedClassIds || [];
       const primaryClasses = await req.tenantDb.Class.find({ primaryTeacherId: String(currentUserId) });
       const allClassesForTeacher = new Set([...assignedClassIds, ...primaryClasses.map((c) => c._id.toString())]);
 
       const studentClassId = String(recipient.assignedClassId || (recipient.assignedClassIds && recipient.assignedClassIds[0]));
-      if (!allClassesForTeacher.has(studentClassId)) {
-        return res.status(403).json({
-          error: 'UnauthorizedRecipient',
-          message: 'You are only authorized to message students enrolled in your assigned classes.',
+      if (allClassesForTeacher.size > 0 && studentClassId && !allClassesForTeacher.has(studentClassId)) {
+        const priorMsg = await req.tenantDb.Message.findOne({
+          $or: [
+            { senderId: String(recipientId), recipientId: String(currentUserId) },
+            { senderId: String(currentUserId), recipientId: String(recipientId) },
+          ],
         });
+        if (!priorMsg) {
+          return res.status(403).json({
+            error: 'UnauthorizedRecipient',
+            message: 'You are only authorized to message students enrolled in your assigned classes.',
+          });
+        }
       }
     }
 

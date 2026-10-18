@@ -555,13 +555,91 @@ export const api = {
   },
 
   // Class Roster Import
-  async importClassRoster(databaseName: string, classId: string, students: any[]) {
+  async importClassRoster(databaseName: string, classId: string, students: any[]): Promise<{
+    success: boolean;
+    message: string;
+    importedCount?: number;
+    createdCount?: number;
+    updatedCount?: number;
+    skippedCount?: number;
+    errors?: any[];
+  }> {
     const res = await fetch(`${BASE_URL}/classes/${classId}/import-roster`, {
       method: 'POST',
       headers: getAuthHeaders(databaseName),
       body: JSON.stringify({ students }),
     });
-    return res.json();
+    return await safeJson(res, { success: false, message: 'Server communication error during roster import.' });
+  },
+
+  // Calling & WebRTC Signaling
+  async getActiveCall(databaseName: string): Promise<{ call: any }> {
+    try {
+      const res = await fetch(`${BASE_URL}/calls/active`, {
+        headers: getAuthHeaders(databaseName),
+      });
+      return await safeJson(res, { call: null });
+    } catch {
+      return { call: null };
+    }
+  },
+
+  async initiateCall(
+    databaseName: string,
+    payload: { recipientId: string; callType: 'audio' | 'video'; offerSdp?: any }
+  ): Promise<{ success: boolean; message?: string; call?: any }> {
+    try {
+      const res = await fetch(`${BASE_URL}/calls/initiate`, {
+        method: 'POST',
+        headers: getAuthHeaders(databaseName),
+        body: JSON.stringify(payload),
+      });
+      return await safeJson(res, { success: false, message: 'Failed to initiate call.' });
+    } catch (err: any) {
+      return { success: false, message: err.message || 'Call initiation failed.' };
+    }
+  },
+
+  async respondCall(
+    databaseName: string,
+    callId: string,
+    payload: { action: 'answer' | 'decline'; answerSdp?: any }
+  ) {
+    try {
+      const res = await fetch(`${BASE_URL}/calls/${callId}/respond`, {
+        method: 'POST',
+        headers: getAuthHeaders(databaseName),
+        body: JSON.stringify(payload),
+      });
+      return await safeJson(res, { success: false, message: 'Failed to respond to call.' });
+    } catch (err: any) {
+      return { success: false, message: err.message || 'Call response failed.' };
+    }
+  },
+
+  async sendCallSignal(databaseName: string, callId: string, signal: any) {
+    try {
+      const res = await fetch(`${BASE_URL}/calls/${callId}/signal`, {
+        method: 'POST',
+        headers: getAuthHeaders(databaseName),
+        body: JSON.stringify({ signal }),
+      });
+      return await safeJson(res, { success: false });
+    } catch {
+      return { success: false };
+    }
+  },
+
+  async endCall(databaseName: string, callId: string) {
+    try {
+      const res = await fetch(`${BASE_URL}/calls/${callId}/end`, {
+        method: 'POST',
+        headers: getAuthHeaders(databaseName),
+      });
+      return await safeJson(res, { success: false, message: 'Failed to terminate call.' });
+    } catch (err: any) {
+      return { success: false, message: err.message || 'Call termination failed.' };
+    }
   },
 };
 

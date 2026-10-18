@@ -20,18 +20,20 @@ const headers = {
   'x-tenant-database': dbName,
 };
 
+const PORT = process.env.PORT || 3000;
+
 async function runTests() {
   console.log('--- Running Features Verification ---');
 
   // 1. Get classes
-  const classesRes = await fetch('http://localhost:5001/api/classes', { headers }).then(r => r.json());
+  const classesRes = await fetch(`http://localhost:${PORT}/api/classes`, { headers }).then(r => r.json());
   console.log('1. Classes Count:', classesRes.classes?.length);
   const sampleClass = classesRes.classes?.[0];
   const classId = sampleClass?.id;
   console.log('   Target Class ID:', classId, 'Name:', sampleClass?.name);
 
   // 2. Test Assignment creation
-  const asgnRes = await fetch('http://localhost:5001/api/assignments', {
+  const asgnRes = await fetch(`http://localhost:${PORT}/api/assignments`, {
     method: 'POST',
     headers,
     body: JSON.stringify({
@@ -48,7 +50,7 @@ async function runTests() {
   console.log('2. Assignment Creation Status:', asgnRes.status, 'Success:', asgnRes.data.success, 'Title:', asgnRes.data.assignment?.title);
 
   // 3. Test Quiz creation
-  const quizRes = await fetch('http://localhost:5001/api/quizzes', {
+  const quizRes = await fetch(`http://localhost:${PORT}/api/quizzes`, {
     method: 'POST',
     headers,
     body: JSON.stringify({
@@ -71,7 +73,7 @@ async function runTests() {
   console.log('3. Quiz Creation Status:', quizRes.status, 'Success:', quizRes.data.success, 'Quiz ID:', quizRes.data.quiz?._id);
 
   // 4. Test Marks Batch Saving
-  const marksRes = await fetch('http://localhost:5001/api/marks/batch', {
+  const marksRes = await fetch(`http://localhost:${PORT}/api/marks/batch`, {
     method: 'POST',
     headers,
     body: JSON.stringify({
@@ -96,11 +98,11 @@ async function runTests() {
   console.log('4. Marks Batch Save Status:', marksRes.status, 'Count:', marksRes.data.count);
 
   // 5. Test Marks Retrieval
-  const getMarksRes = await fetch(`http://localhost:5001/api/marks?classId=${classId}`, { headers }).then(r => r.json());
+  const getMarksRes = await fetch(`http://localhost:${PORT}/api/marks?classId=${classId}`, { headers }).then(r => r.json());
   console.log('5. Marks Retrieval Count:', getMarksRes.count, 'Student:', getMarksRes.marks?.[0]?.studentName, 'Total:', getMarksRes.marks?.[0]?.totalMarks, 'Grade:', getMarksRes.marks?.[0]?.grade);
 
   // 6. Test Roster Import
-  const rosterRes = await fetch(`http://localhost:5001/api/classes/${classId}/import-roster`, {
+  const rosterRes = await fetch(`http://localhost:${PORT}/api/classes/${classId}/import-roster`, {
     method: 'POST',
     headers,
     body: JSON.stringify({

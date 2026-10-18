@@ -219,76 +219,110 @@ router.post('/:id/import-roster', authorizeRoles('admin', 'teacher'), async (req
     const defaultPasswordHash = bcrypt.hashSync('Student@123', 10);
     const addedStudentIds = [];
     const processedStudents = [];
+    const failedRecords = [];
     let updatedCount = 0;
     let createdCount = 0;
+    let skippedCount = 0;
 
-    for (const s of students) {
-      const rollNumber = String(s.rollNumber || '').trim();
-      const fullName = String(s.fullName || s.name || '').trim();
-      if (!rollNumber || !fullName) continue;
+    for (let idx = 0; idx < students.length; idx++) {
+      const s = students[idx];
+      const rollNumber = String(s.rollNumber || s.roll_no || s['Roll Number'] || '').trim();
+      const fullName = String(s.fullName || s.name || s['Student Name'] || s.studentName || '').trim();
 
-      // Check if student with this rollNumber already exists in this tenant
-      let existingUser = await req.tenantDb.User.findOne({
-        role: 'student',
-        rollNumber,
-      });
-
-      if (existingUser) {
-        // Update assignedClassId
-        existingUser.assignedClassId = id;
-        existingUser.fullName = fullName || existingUser.fullName;
-        if (s.email && !existingUser.email) existingUser.email = s.email.trim().toLowerCase();
-        if (s.phone && !existingUser.phone) existingUser.phone = s.phone.trim();
-        await existingUser.save();
-
-        addedStudentIds.push(existingUser._id.toString());
-        processedStudents.push({
-          id: existingUser._id.toString(),
-          rollNumber: existingUser.rollNumber,
-          fullName: existingUser.fullName,
-          username: existingUser.username,
-          status: 'associated',
+      if (!rollNumber || !fullName) {
+        skippedCount++;
+        failedRecords.push({
+          row: idx + 1,
+          rollNumber: rollNumber || 'Missing',
+          fullName: fullName || 'Missing',
+          reason: !rollNumber ? 'Missing Roll Number' : 'Missing Student Name',
         });
-        updatedCount++;
-      } else {
-        // Generate a clean unique username
-        const cleanRoll = rollNumber.toLowerCase().replace(/[^a-z0-9]/g, '');
-        let usernameCandidate = `stu_${cleanRoll}`;
-        let duplicateCheck = await req.tenantDb.User.findOne({ username: usernameCandidate });
-        let counter = 1;
-        while (duplicateCheck) {
-          usernameCandidate = `stu_${cleanRoll}_${counter++}`;
-          duplicateCheck = await req.tenantDb.User.findOne({ username: usernameCandidate });
-        }
-
-        const emailCandidate = s.email && s.email.trim()
-          ? s.email.trim().toLowerCase()
-          : `${usernameCandidate}@${req.databaseName}.edu`;
-
-        const newStudent = await req.tenantDb.User.create({
-          username: usernameCandidate,
-          passwordHash: defaultPasswordHash,
-          fullName,
-          email: emailCandidate,
-          role: 'student',
-          databaseName: req.databaseName,
-          rollNumber,
-          phone: s.phone ? String(s.phone).trim() : '',
-          gradeLevel: s.gradeLevel || targetClass.gradeLevel,
-          assignedClassId: id,
-          status: 'active',
-        });
-
-        addedStudentIds.push(newStudent._id.toString());
-        processedStudents.push({
-          id: newStudent._id.toString(),
-          rollNumber: newStudent.rollNumber,
-          fullName: newStudent.fullName,
-          username: newStudent.username,
-          status: 'created',
-        });
-        createdCount++;
+        continue;
       }
+
+      try {
+        // Check if student with this rollNumber already exists in this tenant
+        let existingUser = await req.tenantDb.User.findOne({
+          role: 'student',
+          rollNumber,
+        });
+
+        if (existingUser) {
+          // Update assignedClassId
+          existingUser.assignedClassId = id;
+          existingUser.fullName = fullName || existingUser.fullName;
+          if (s.email && !existingUser.email) existingUser.email = String(s.email).trim().toLowerCase();
+          if (s.phone && !existingUser.phone) existingUser.phone = String(s.phone).trim();
+          await existingUser.save();
+
+          addedStudentIds.push(existingUser._id.toString());
+          processedStudents.push({
+            id: existingUser._id.toString(),
+            rollNumber: existingUser.rollNumber,
+            fullName: existingUser.fullName,
+            username: existingUser.username,
+            status: 'associated',
+          });
+          updatedCount++;
+        } else {
+          // Generate a clean unique username
+          const cleanRoll = rollNumber.toLowerCase().replace(/[^a-z0-9]/g, '');
+          let usernameCandidate = `stu_${cleanRoll || 'student'}`;
+          let duplicateCheck = await req.tenantDb.User.findOne({ username: usernameCandidate });
+          let counter = 1;
+          while (duplicateCheck) {
+            usernameCandidate = `stu_${cleanRoll || 'student'}_${counter++}`;
+            duplicateCheck = await req.tenantDb.User.findOne({ username: usernameCandidate });
+          }
+
+          const emailCandidate = s.email && String(s.email).trim()
+            ? String(s.email).trim().toLowerCase()
+            : `${usernameCandidate}@${req.databaseName}.edu`;
+
+          const newStudent = await req.tenantDb.User.create({
+            username: usernameCandidate,
+            passwordHash: defaultPasswordHash,
+            fullName,
+            email: emailCandidate,
+            role: 'student',
+            databaseName: req.databaseName,
+            rollNumber,
+            phone: s.phone ? String(s.phone).trim() : '',
+            gradeLevel: s.gradeLevel || targetClass.gradeLevel,
+            assignedClassId: id,
+            status: 'active',
+          });
+
+          addedStudentIds.push(newStudent._id.toString());
+          processedStudents.push({
+            id: newStudent._id.toString(),
+            rollNumber: newStudent.rollNumber,
+            fullName: newStudent.fullName,
+            username: newStudent.username,
+            status: 'created',
+          });
+          createdCount++;
+        }
+      } catch (rowErr) {
+        skippedCount++;
+        failedRecords.push({
+          row: idx + 1,
+          rollNumber,
+          fullName,
+          reason: rowErr.message || 'Database error processing record',
+        });
+      }
+    }
+
+    if (processedStudents.length === 0) {
+      return res.status(400).json({
+        success: false,
+        error: 'ImportFailed',
+        message: 'No student records were imported. Please check required columns and format.',
+        skippedCount,
+        failedCount: failedRecords.length,
+        errors: failedRecords,
+      });
     }
 
     // Update targetClass.studentIds
@@ -303,17 +337,19 @@ router.post('/:id/import-roster', authorizeRoles('admin', 'teacher'), async (req
       actorName: req.user.fullName || req.user.username,
       actorRole: req.user.role,
       actionCategory: 'ROSTER_IMPORT',
-      description: `Imported student roster of ${processedStudents.length} students (${createdCount} created, ${updatedCount} updated) for class "${targetClass.name}"`,
+      description: `Imported student roster of ${processedStudents.length} students (${createdCount} created, ${updatedCount} updated, ${skippedCount} skipped) for class "${targetClass.name}"`,
     }).catch(() => null);
 
     res.status(201).json({
       success: true,
-      message: `Roster import complete: ${createdCount} new students enrolled, ${updatedCount} existing student records associated with ${targetClass.name}.`,
+      message: `Roster import complete: ${createdCount} new students enrolled, ${updatedCount} existing student records associated with ${targetClass.name}${skippedCount > 0 ? ` (${skippedCount} skipped)` : ''}.`,
       totalEnrolled: mergedIds.length,
       createdCount,
       updatedCount,
+      skippedCount,
       importedCount: processedStudents.length,
       students: processedStudents,
+      failedRecords,
     });
   } catch (err) {
     res.status(500).json({ error: 'RosterImportError', message: err.message });

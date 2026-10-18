@@ -104,8 +104,9 @@ export const StudentRosterImport: React.FC = () => {
     const reader = new FileReader();
     reader.onload = (evt) => {
       try {
-        const data = evt.target?.result;
-        const workbook = XLSX.read(data, { type: 'binary' });
+        const buffer = evt.target?.result as ArrayBuffer;
+        const data = new Uint8Array(buffer);
+        const workbook = XLSX.read(data, { type: 'array' });
 
         if (!workbook.SheetNames || workbook.SheetNames.length === 0) {
           setFileError('The uploaded file contains no readable worksheets.');
@@ -122,20 +123,40 @@ export const StudentRosterImport: React.FC = () => {
         }
 
         // Header detection
-        const headers: string[] = rawJson[0].map((h: any) => String(h).trim().toLowerCase());
+        let headerRowIdx = -1;
+        let rollIdx = -1;
+        let nameIdx = -1;
+        let emailIdx = -1;
+        let phoneIdx = -1;
 
-        let rollIdx = headers.findIndex((h) =>
-          h.includes('roll') || h.includes('id') || h.includes('number') || h === 'roll_no'
-        );
-        let nameIdx = headers.findIndex((h) =>
-          h.includes('name') || h.includes('student') || h.includes('full')
-        );
-        let emailIdx = headers.findIndex((h) => h.includes('email') || h.includes('mail'));
-        let phoneIdx = headers.findIndex((h) => h.includes('phone') || h.includes('contact') || h.includes('mobile'));
+        for (let r = 0; r < Math.min(rawJson.length, 10); r++) {
+          const row = rawJson[r];
+          if (!Array.isArray(row)) continue;
+          const headers = row.map((h: any) => String(h || '').trim().toLowerCase());
+          
+          const rIdx = headers.findIndex((h) => h.includes('roll') || h.includes('id') || h === 'roll_no' || h === 'roll number');
+          const nIdx = headers.findIndex((h) => h.includes('name') || h.includes('student') || h === 'full name');
+          
+          if (rIdx !== -1 && nIdx !== -1) {
+            headerRowIdx = r;
+            rollIdx = rIdx;
+            nameIdx = nIdx;
+            emailIdx = headers.findIndex((h) => h.includes('email') || h.includes('mail'));
+            phoneIdx = headers.findIndex((h) => h.includes('phone') || h.includes('mobile') || h.includes('contact'));
+            break;
+          }
+        }
 
-        // Fallbacks if not detected by keywords
-        if (rollIdx === -1 && headers.length > 0) rollIdx = 0;
-        if (nameIdx === -1 && headers.length > 1) nameIdx = 1;
+        if (headerRowIdx === -1) {
+          const headers: string[] = rawJson[0].map((h: any) => String(h).trim().toLowerCase());
+          rollIdx = headers.findIndex((h) => h.includes('roll') || h.includes('id') || h.includes('number'));
+          nameIdx = headers.findIndex((h) => h.includes('name') || h.includes('student'));
+          emailIdx = headers.findIndex((h) => h.includes('email') || h.includes('mail'));
+          phoneIdx = headers.findIndex((h) => h.includes('phone') || h.includes('contact') || h.includes('mobile'));
+          if (rollIdx === -1 && headers.length > 0) rollIdx = 0;
+          if (nameIdx === -1 && headers.length > 1) nameIdx = 1;
+          headerRowIdx = 0;
+        }
 
         if (rollIdx === -1 || nameIdx === -1) {
           setFileError('Could not identify required columns: "Roll Number" and "Student Name". Please use the template.');
@@ -146,7 +167,7 @@ export const StudentRosterImport: React.FC = () => {
         const parsed: ParsedStudentRow[] = [];
         const seenRollsInFile = new Set<string>();
 
-        for (let i = 1; i < rawJson.length; i++) {
+        for (let i = headerRowIdx + 1; i < rawJson.length; i++) {
           const rowData = rawJson[i];
           if (!rowData || rowData.length === 0 || rowData.every((cell: any) => cell === '')) {
             continue; // skip completely blank rows
@@ -205,7 +226,7 @@ export const StudentRosterImport: React.FC = () => {
       }
     };
 
-    reader.readAsBinaryString(file);
+    reader.readAsArrayBuffer(file);
     e.target.value = '';
   };
 

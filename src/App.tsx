@@ -18,6 +18,7 @@ import { AcademicCalendar } from './components/AcademicCalendar';
 import { PerformanceAnalytics } from './components/PerformanceAnalytics';
 import { NoticeCommunication } from './components/NoticeCommunication';
 import { ChatCommunication } from './components/ChatCommunication';
+import { StudentRosterImport } from './components/StudentRosterImport';
 import {
   TenantDatabaseConsole,
   AuditLogConsole,
@@ -67,14 +68,12 @@ const CRMWorkspaceShell: React.FC = () => {
           {activeTab === 'assignments' &&
             (currentUser.role === 'student' ? (
               <StudentAssignments />
-            ) : currentUser.role === 'teacher' ? (
-              <TeacherAssignments />
             ) : (
-              <DashboardOverview />
+              <TeacherAssignments />
             ))}
           {activeTab === 'quizzes' && <QuizManagement />}
-          {activeTab === 'marks' && (currentUser.role === 'admin' ? <PerformanceAnalytics /> : <MarksSpreadsheet />)}
-          {activeTab === 'roster' && (currentUser.role === 'teacher' ? <TeacherStudentRoster /> : <DashboardOverview />)}
+          {activeTab === 'marks' && <MarksSpreadsheet />}
+          {activeTab === 'roster' && (currentUser.role === 'admin' ? <StudentRosterImport /> : <TeacherStudentRoster />)}
           {activeTab === 'schedule' && <ScheduleManagement />}
           {activeTab === 'calendar' && <AcademicCalendar />}
           {activeTab === 'analytics' && <PerformanceAnalytics />}
