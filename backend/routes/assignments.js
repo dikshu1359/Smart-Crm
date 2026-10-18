@@ -51,7 +51,11 @@ router.get('/', async (req, res) => {
     const populated = assignments.map((a) => {
       const aObj = a.toObject ? a.toObject() : { ...a };
       const aId = a._id ? a._id.toString() : a.id;
-      const subs = submissions.filter((s) => s.assignmentId === aId);
+      const subs =
+        role === 'student'
+          ? submissions.filter((s) => s.assignmentId === aId && String(s.studentId) === String(userId))
+          : submissions.filter((s) => s.assignmentId === aId);
+
       return {
         ...aObj,
         id: aId,

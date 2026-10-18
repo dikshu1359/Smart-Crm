@@ -46,11 +46,12 @@ router.get('/', async (req, res) => {
       sObj.id = s._id ? s._id.toString() : s.id;
       sObj.className = classMap.get(String(s.classId)) || `Class ${s.classId}`;
 
-      // If student requested, enrich with student's personal status
+      // If student requested, isolate records and enrich with student's personal status
       if (role === 'student' && userId) {
         const studentRecord = (s.records || []).find((r) => String(r.studentId) === String(userId));
         sObj.personalStatus = studentRecord ? studentRecord.status : 'unmarked';
         sObj.personalRemarks = studentRecord ? studentRecord.remarks : '';
+        sObj.records = studentRecord ? [studentRecord] : [];
       }
 
       return sObj;
@@ -179,15 +180,20 @@ router.get('/summary', async (req, res) => {
       },
       classSummary,
       studentSummary,
-      lowAttendanceStudents,
+      lowAttendanceStudents: role === 'student' ? [] : lowAttendanceStudents,
       recentSessions: targetSessions.slice(0, 10).map((s) => {
         const sObj = s.toObject ? s.toObject() : { ...s };
         const sId = s._id ? s._id.toString() : s.id;
         const cls = classMap.get(String(s.classId));
+        const filteredRecords =
+          role === 'student' && userId
+            ? (s.records || []).filter((r) => String(r.studentId) === String(userId))
+            : s.records || [];
         return {
           ...sObj,
           id: sId,
           className: cls ? cls.name : 'Class ' + s.classId,
+          records: filteredRecords,
         };
       }),
     });

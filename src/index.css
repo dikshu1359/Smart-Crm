@@ -86,3 +86,64 @@
 ::-webkit-scrollbar-thumb:hover {
   background: rgba(236, 72, 153, 0.45);
 }
+
+@media print {
+  @page {
+    size: A4 portrait;
+    margin: 10mm 12mm;
+  }
+
+  html, body {
+    background-color: #ffffff !important;
+    color: #000000 !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+
+  /* Hide app navigation chrome, header, sidebar, toolbars, modals, and buttons */
+  aside,
+  header,
+  nav,
+  button,
+  input,
+  select,
+  textarea,
+  .no-print,
+  .print-hidden,
+  .print\:hidden,
+  [role="dialog"],
+  .fixed:not(.printable-form-container) {
+    display: none !important;
+  }
+
+  main {
+    padding: 0 !important;
+    margin: 0 !important;
+    max-width: 100% !important;
+    width: 100% !important;
+  }
+
+  .print\:block {
+    display: block !important;
+  }
+
+  /* Printable form specific styling */
+  .printable-form {
+    display: block !important;
+    background: #ffffff !important;
+    color: #000000 !important;
+    page-break-inside: avoid;
+    box-shadow: none !important;
+    border: none !important;
+    width: 100% !important;
+    max-width: 210mm !important;
+    margin: 0 auto !important;
+  }
+
+  .printable-form * {
+    color: #000000 !important;
+    border-color: #333333 !important;
+  }
+}

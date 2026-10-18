@@ -464,6 +464,28 @@ export const api = {
       headers: getAuthHeaders(databaseName),
       body: JSON.stringify(payload),
     });
+    const cType = res.headers.get('content-type') || '';
+    if (!cType.includes('application/json')) {
+      const text = await res.text();
+      return { success: false, ok: false, message: `Server error (${res.status}): ${text.slice(0, 150)}` };
+    }
+    return res.json();
+  },
+
+  async publishMarks(
+    databaseName: string,
+    payload: { classId: string; subject?: string; assessmentTitle?: string; isPublished?: boolean }
+  ) {
+    const res = await fetch(`${BASE_URL}/marks/publish`, {
+      method: 'POST',
+      headers: getAuthHeaders(databaseName),
+      body: JSON.stringify(payload),
+    });
+    const cType = res.headers.get('content-type') || '';
+    if (!cType.includes('application/json')) {
+      const text = await res.text();
+      return { success: false, ok: false, message: `Server error (${res.status}): ${text.slice(0, 150)}` };
+    }
     return res.json();
   },
 

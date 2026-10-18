@@ -27,8 +27,24 @@ router.get('/', async (req, res) => {
     // Role-based visibility
     if (currentRole === 'student' && currentUserId && currentUserId !== 'system') {
       if (role === 'student') {
-        // Students can only query their own student record
+        // Students can ONLY query their own student record
         query._id = currentUserId;
+      } else if (!role) {
+        // If no role filter specified, return only self and faculty/teachers for communication
+        query.$or = [{ _id: currentUserId }, { role: 'teacher' }];
+      }
+    } else if (currentRole === 'teacher' && currentUserId && currentUserId !== 'system') {
+      const teacher = await req.tenantDb.User.findById(currentUserId).catch(() => null);
+      const assignedClassIds = teacher?.assignedClassIds || [];
+      const primaryClasses = await req.tenantDb.Class.find({ primaryTeacherId: String(currentUserId) });
+      const allocatedClassIds = Array.from(new Set([...assignedClassIds, ...primaryClasses.map((c) => c._id ? c._id.toString() : c.id)]));
+
+      if (role === 'student') {
+        // Teachers only see students from classes allocated to them
+        query.$or = [
+          { assignedClassId: { $in: allocatedClassIds } },
+          { assignedClassIds: { $in: allocatedClassIds } },
+        ];
       }
     }
 
@@ -38,20 +54,15 @@ router.get('/', async (req, res) => {
       const uObj = u.toObject ? u.toObject() : { ...u };
       delete uObj.passwordHash;
       uObj.id = u._id ? u._id.toString() : u.id;
-
-      // Privacy redactions for teachers viewing student records
-      if (currentRole === 'teacher' && uObj.role === 'student') {
-        delete uObj.casteCategory;
-        delete uObj.religion;
-        delete uObj.guardianContact;
-        delete uObj.fatherContact;
-        delete uObj.motherContact;
-      }
-
       return uObj;
     });
 
-    res.json({ users: formatted, count: formatted.length });
+    // Final security guarantee: students strictly never receive other students' private records
+    const safeUsers = currentRole === 'student'
+      ? formatted.filter((u) => u.role !== 'student' || String(u.id) === String(currentUserId))
+      : formatted;
+
+    res.json({ users: safeUsers, count: safeUsers.length });
   } catch (err) {
     res.status(500).json({ error: 'FetchUsersError', message: err.message });
   }
@@ -233,6 +244,15 @@ router.put('/:id', async (req, res) => {
     delete updates.passwordHash; // Do not allow direct passwordHash manipulation
     delete updates.role; // Do not allow arbitrary role changes
     delete updates.databaseName;
+
+    // Protect institutional fields from unauthorized modification by students
+    if (!isAdmin) {
+      delete updates.assignedClassId;
+      delete updates.assignedClassIds;
+      delete updates.rollNumber;
+      delete updates.status;
+      delete updates.username;
+    }
 
     if (updates.password) {
       updates.passwordHash = bcrypt.hashSync(updates.password, 10);

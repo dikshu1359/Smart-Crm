@@ -13,4 +13,5 @@ export const DAYS_OF_WEEK = [
   'Wednesday',
   'Thursday',
   'Friday',
+  'Saturday',
 ] as const;

@@ -250,4 +250,44 @@ router.get('/student-summary', async (req, res) => {
   }
 });
 
+/**
+ * POST /api/marks/publish
+ * Publish or unpublish assessment marks for a class
+ */
+router.post('/publish', authorizeRoles('admin', 'teacher'), async (req, res) => {
+  try {
+    const { classId, subject, assessmentTitle, isPublished } = req.body;
+    if (!classId) {
+      return res.status(400).json({ error: 'MissingFields', message: 'Class ID is required.' });
+    }
+    const publishVal = isPublished !== undefined ? Boolean(isPublished) : true;
+    const query = { classId };
+    if (subject) query.subject = subject.trim();
+    if (assessmentTitle) query.assessmentTitle = assessmentTitle.trim();
+
+    const marksToUpdate = await req.tenantDb.Marks.find(query);
+    for (const m of marksToUpdate) {
+      await req.tenantDb.Marks.findByIdAndUpdate(m._id || m.id, { isPublished: publishVal });
+    }
+
+    await dbManager.logActivity({
+      databaseName: req.databaseName,
+      institutionName: req.user.institutionName,
+      actorName: req.user.fullName || req.user.username,
+      actorRole: req.user.role,
+      actionCategory: 'MARKS_GRADEBOOK',
+      description: `${publishVal ? 'Published' : 'Unpublished'} marks for assessment "${assessmentTitle || 'All'}" (${subject || 'All'}) in class ${classId}`,
+    }).catch(() => null);
+
+    res.json({
+      success: true,
+      message: `Successfully ${publishVal ? 'published' : 'unpublished'} marks for ${marksToUpdate.length} student records.`,
+      updatedCount: marksToUpdate.length,
+      isPublished: publishVal,
+    });
+  } catch (err) {
+    res.status(500).json({ error: 'PublishMarksError', message: err.message });
+  }
+});
+
 export default router;

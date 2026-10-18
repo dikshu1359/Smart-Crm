@@ -18,6 +18,7 @@ export const DAYS_OF_WEEK = [
   'Wednesday',
   'Thursday',
   'Friday',
+  'Saturday',
 ];
 
 export const ScheduleSchema = {
@@ -29,13 +30,14 @@ export const ScheduleSchema = {
   },
   timeSlot: {
     type: String,
-    enum: TIME_SLOTS,
     required: true,
   },
   classId: { type: String, required: true },
   subject: { type: String, required: true },
-  teacherId: { type: String, required: true },
-  roomNumber: { type: String, required: true },
+  teacherId: { type: String },
+  roomNumber: { type: String },
+  isBreak: { type: Boolean, default: false },
+  breakTitle: { type: String },
 };
 
 export class ScheduleSlot {

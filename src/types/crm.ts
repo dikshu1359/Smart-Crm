@@ -70,8 +70,12 @@ export interface TenantUser {
   academicYear?: string;
   fatherName?: string;
   fatherContact?: string;
+  fatherOccupation?: string;
+  fatherAddress?: string;
   motherName?: string;
   motherContact?: string;
+  motherOccupation?: string;
+  motherAddress?: string;
   guardianInfo?: string;
   previousQualification?: string;
   previousInstitution?: string;
@@ -209,7 +213,7 @@ export interface ChatContact {
   assignedClassId?: string;
 }
 
-export type DayOfWeek = 'Monday' | 'Tuesday' | 'Wednesday' | 'Thursday' | 'Friday';
+export type DayOfWeek = 'Monday' | 'Tuesday' | 'Wednesday' | 'Thursday' | 'Friday' | 'Saturday';
 
 export type TimeSlotInterval =
   | '09:00 - 10:00'
@@ -222,12 +226,16 @@ export type TimeSlotInterval =
 export interface ScheduleSlot {
   id?: string;
   _id?: string;
-  day: DayOfWeek;
+  day: DayOfWeek | string;
   timeSlot: TimeSlotInterval | string;
   classId: string;
   subject: string;
-  teacherId: string;
-  roomNumber: string;
+  teacherId?: string;
+  roomNumber?: string;
+  isBreak?: boolean;
+  breakTitle?: string;
+  startTime?: string;
+  endTime?: string;
 }
 
 export interface NoticeItem {

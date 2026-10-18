@@ -109,6 +109,7 @@ interface AppContextValue {
   deleteTenant: (databaseName: string) => Promise<{ ok: boolean; message?: string }>;
   fetchMarks: (filter?: { classId?: string; subject?: string; assessmentTitle?: string }) => Promise<StudentMarksRecord[]>;
   saveMarksBatch: (payload: any) => Promise<{ ok: boolean; message?: string; count?: number }>;
+  publishMarks: (payload: { classId: string; subject?: string; assessmentTitle?: string; isPublished?: boolean }) => Promise<{ ok: boolean; message?: string; updatedCount?: number }>;
   importClassRoster: (classId: string, students: any[]) => Promise<{ ok: boolean; message?: string; importedCount?: number; createdCount?: number; updatedCount?: number }>;
 }
 
@@ -377,8 +378,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     try {
       const res = await api.updateUser(activeTenant.databaseName, userId, updates);
       if (!res.success) return { ok: false, message: res.message || 'Update failed.' };
+      if (res.user) {
+        const updatedObj = { ...res.user, id: res.user.id || res.user._id?.toString() || userId };
+        if (currentUser && (currentUser.id === userId || (currentUser as any)._id === userId)) {
+          setCurrentUser(updatedObj);
+        }
+      }
       await refreshData();
-      return { ok: true };
+      return { ok: true, user: res.user };
     } catch (err: any) {
       return { ok: false, message: err.message };
     }
@@ -702,6 +709,23 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   };
 
+  const publishMarks = async (payload: {
+    classId: string;
+    subject?: string;
+    assessmentTitle?: string;
+    isPublished?: boolean;
+  }) => {
+    if (!activeTenant) return { ok: false, message: 'No active institution.' };
+    try {
+      const res = await api.publishMarks(activeTenant.databaseName, payload);
+      if (!res.success) return { ok: false, message: res.message || 'Failed to update publication status.' };
+      await refreshData();
+      return { ok: true, message: res.message, updatedCount: res.updatedCount };
+    } catch (err: any) {
+      return { ok: false, message: err.message };
+    }
+  };
+
   const importClassRoster = async (classId: string, students: any[]) => {
     if (!activeTenant) return { ok: false, message: 'No active institution.' };
     try {
@@ -781,6 +805,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         deleteTenant,
         fetchMarks,
         saveMarksBatch,
+        publishMarks,
         importClassRoster,
       }}
     >

@@ -247,8 +247,8 @@ router.get('/', tenantAuth, async (req, res) => {
       studentPerformance: role === 'student' ? studentPerformance.filter((s) => s.studentId === userId) : studentPerformance,
       teacherPerformance: role === 'teacher' ? teacherPerformance.filter((t) => t.teacherId === userId) : teacherPerformance,
       classPerformance,
-      topStudents,
-      studentsNeedingAttention,
+      topStudents: role === 'student' ? [] : topStudents,
+      studentsNeedingAttention: role === 'student' ? [] : studentsNeedingAttention,
     });
   } catch (err) {
     res.status(500).json({ error: 'AnalyticsError', message: err.message });

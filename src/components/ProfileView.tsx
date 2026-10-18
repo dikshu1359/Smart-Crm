@@ -13,27 +13,47 @@ import {
   Mail,
   MapPin,
   Calendar,
+  Lock,
+  Users,
+  Briefcase,
+  User,
 } from 'lucide-react';
 import api from '../services/api';
 
 export const ProfileView: React.FC = () => {
-  const { activeTenant, currentUser, refreshData, setActiveTab } = useApp();
+  const { activeTenant, currentUser, refreshData, setActiveTab, classes } = useApp();
   if (!activeTenant || !currentUser) return null;
 
   const isStudent = currentUser.role === 'student';
   const isTeacher = currentUser.role === 'teacher';
   const isAdmin = currentUser.role === 'admin';
 
-  // Editable Profile States
+  // Section A: Personal Details
   const [fullName, setFullName] = useState(currentUser.fullName || '');
   const [email, setEmail] = useState(currentUser.email || '');
   const [phone, setPhone] = useState(currentUser.phone || '');
+  const [dateOfBirth, setDateOfBirth] = useState(currentUser.dateOfBirth || '');
+  const [gender, setGender] = useState(currentUser.gender || 'Male');
+  const [residentialAddress, setResidentialAddress] = useState(currentUser.residentialAddress || '');
+  const [rollNumber, setRollNumber] = useState(currentUser.rollNumber || '');
   const [gradeLevel, setGradeLevel] = useState(currentUser.gradeLevel || '');
   const [departmentBranch, setDepartmentBranch] = useState(currentUser.departmentBranch || '');
   const [classDivision, setClassDivision] = useState(currentUser.classDivision || '');
-  const [rollNumber, setRollNumber] = useState(currentUser.rollNumber || '');
-  const [guardianContact, setGuardianContact] = useState(currentUser.guardianContact || '');
-  const [residentialAddress, setResidentialAddress] = useState(currentUser.residentialAddress || '');
+  const [casteCategory, setCasteCategory] = useState(currentUser.casteCategory || 'General');
+  const [religion, setReligion] = useState(currentUser.religion || '');
+
+  // Section B: Parent / Guardian Details
+  const [fatherName, setFatherName] = useState(currentUser.fatherName || '');
+  const [fatherContact, setFatherContact] = useState(currentUser.fatherContact || '');
+  const [fatherOccupation, setFatherOccupation] = useState(currentUser.fatherOccupation || '');
+  const [fatherAddress, setFatherAddress] = useState(currentUser.fatherAddress || currentUser.residentialAddress || '');
+  const [motherName, setMotherName] = useState(currentUser.motherName || '');
+  const [motherContact, setMotherContact] = useState(currentUser.motherContact || '');
+  const [motherOccupation, setMotherOccupation] = useState(currentUser.motherOccupation || '');
+  const [motherAddress, setMotherAddress] = useState(currentUser.motherAddress || currentUser.residentialAddress || '');
+  const [guardianContact, setGuardianContact] = useState(currentUser.guardianContact || currentUser.fatherContact || '');
+
+  // Teacher specific
   const [specialization, setSpecialization] = useState(currentUser.specialization || '');
   const [qualification, setQualification] = useState(currentUser.qualification || '');
 
@@ -42,8 +62,23 @@ export const ProfileView: React.FC = () => {
   const [saveSuccess, setSaveSuccess] = useState<string | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
 
+  const assignedClass = classes.find(
+    (c) => c.id === currentUser.assignedClassId || (c as any)._id === currentUser.assignedClassId
+  );
+
   const handleSaveProfile = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    // Validations
+    if (!fullName.trim()) {
+      setSaveError('Full legal name is required.');
+      return;
+    }
+    if (!email.trim() || !email.includes('@')) {
+      setSaveError('A valid email address is required.');
+      return;
+    }
+
     setIsSaving(true);
     setSaveSuccess(null);
     setSaveError(null);
@@ -58,11 +93,28 @@ export const ProfileView: React.FC = () => {
     };
 
     if (isStudent) {
+      payload.dateOfBirth = dateOfBirth;
+      payload.gender = gender;
       payload.gradeLevel = gradeLevel.trim();
       payload.departmentBranch = departmentBranch.trim();
       payload.classDivision = classDivision.trim();
-      payload.rollNumber = rollNumber.trim();
+      payload.casteCategory = casteCategory.trim();
+      payload.religion = religion.trim();
+
+      // Parent Details
+      payload.fatherName = fatherName.trim();
+      payload.fatherContact = fatherContact.trim();
+      payload.fatherOccupation = fatherOccupation.trim();
+      payload.fatherAddress = fatherAddress.trim();
+      payload.motherName = motherName.trim();
+      payload.motherContact = motherContact.trim();
+      payload.motherOccupation = motherOccupation.trim();
+      payload.motherAddress = motherAddress.trim();
       payload.guardianContact = guardianContact.trim();
+    }
+
+    if (isAdmin) {
+      payload.rollNumber = rollNumber.trim();
     }
 
     if (isTeacher) {
@@ -77,7 +129,7 @@ export const ProfileView: React.FC = () => {
       if (res.success && res.user) {
         setSaveSuccess('Profile successfully updated and saved to database.');
         await refreshData();
-        setTimeout(() => setSaveSuccess(null), 4000);
+        setTimeout(() => setSaveSuccess(null), 5000);
       } else {
         setSaveError(res.message || 'Failed to update profile record.');
       }
@@ -93,7 +145,7 @@ export const ProfileView: React.FC = () => {
         <div>
           <h1 className="text-2xl font-bold text-white font-display">Personal Profile &amp; Role Details</h1>
           <p className="text-xs text-slate-400 mt-1">
-            Manage your institutional profile, academic credentials, and tenant database bindings.
+            Manage your official institutional profile, personal particulars, and parent/guardian contact information.
           </p>
         </div>
 
@@ -111,10 +163,10 @@ export const ProfileView: React.FC = () => {
 
       <form onSubmit={handleSaveProfile} className="space-y-6">
         {/* Profile Card Header */}
-        <div className="p-6 rounded-2xl bg-white/[0.03] border border-white/10 space-y-6">
+        <div className="p-6 rounded-3xl bg-white/[0.03] border border-white/10 space-y-6 shadow-xl">
           <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4 pb-5 border-b border-white/10">
-            <div className="w-14 h-14 rounded-2xl bg-gradient-to-tr from-purple-600 to-pink-500 flex items-center justify-center text-white font-bold text-xl shadow-lg">
-              {currentUser.fullName ? currentUser.fullName.charAt(0).toUpperCase() : <UserCircle className="w-7 h-7" />}
+            <div className="w-16 h-16 rounded-2xl bg-gradient-to-tr from-purple-600 to-pink-500 flex items-center justify-center text-white font-bold text-2xl shadow-lg">
+              {currentUser.fullName ? currentUser.fullName.charAt(0).toUpperCase() : <UserCircle className="w-8 h-8" />}
             </div>
             <div className="flex-1">
               <h2 className="text-lg font-bold text-white">{currentUser.fullName}</h2>
@@ -150,105 +202,276 @@ export const ProfileView: React.FC = () => {
               </span>
             </div>
             <div className="p-3 rounded-xl bg-black/20 border border-white/5">
-              <span className="text-slate-400 block mb-0.5">Joined Date</span>
-              <span className="text-slate-300 font-mono">
-                {currentUser.createdAt ? new Date(currentUser.createdAt).toLocaleDateString() : 'Active'}
+              <span className="text-slate-400 block mb-0.5">Cohort Assignment</span>
+              <span className="text-slate-200 truncate block">
+                {assignedClass?.name || 'Computer Science Cohort'}
               </span>
             </div>
           </div>
 
-          {/* Student Specific Academic Fields (Manual Grade Level Entry) */}
-          {isStudent && (
-            <div className="pt-4 border-t border-white/10 space-y-4">
-              <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-purple-300">
-                <GraduationCap className="w-4 h-4" />
-                <span>Student Academic Details</span>
+          {/* SECTION A: PERSONAL DETAILS */}
+          <div className="pt-4 border-t border-white/10 space-y-4">
+            <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-purple-300">
+              <User className="w-4 h-4" />
+              <span>Section A: Personal Details</span>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <div>
+                <label className="block text-xs font-semibold text-slate-300 mb-1">Full Legal Name *</label>
+                <input
+                  type="text"
+                  required
+                  value={fullName}
+                  onChange={(e) => setFullName(e.target.value)}
+                  className="w-full px-3.5 py-2 text-xs bg-black/40 border border-white/15 rounded-xl text-white focus:outline-none focus:border-purple-500"
+                />
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                {/* Roll Number */}
+              <div>
+                <label className="block text-xs font-semibold text-slate-300 mb-1">Email Address *</label>
+                <input
+                  type="email"
+                  required
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  className="w-full px-3.5 py-2 text-xs bg-black/40 border border-white/15 rounded-xl text-white font-mono focus:outline-none focus:border-purple-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-300 mb-1">Phone Number</label>
+                <input
+                  type="text"
+                  value={phone}
+                  onChange={(e) => setPhone(e.target.value)}
+                  placeholder="e.g. +91 98200 88991"
+                  className="w-full px-3.5 py-2 text-xs bg-black/40 border border-white/15 rounded-xl text-white font-mono focus:outline-none focus:border-purple-500"
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <div>
+                <label className="block text-xs font-semibold text-slate-300 mb-1">Date of Birth</label>
+                <input
+                  type="date"
+                  value={dateOfBirth}
+                  onChange={(e) => setDateOfBirth(e.target.value)}
+                  className="w-full px-3.5 py-2 text-xs bg-black/40 border border-white/15 rounded-xl text-white font-mono focus:outline-none focus:border-purple-500"
+                />
+              </div>
+
+              {/* Protected Roll Number */}
+              <div>
+                <label className="block text-xs font-semibold text-slate-300 mb-1 flex items-center justify-between">
+                  <span>Roll Number</span>
+                  {!isAdmin && <span className="text-[10px] text-amber-400 font-normal">Protected</span>}
+                </label>
+                <input
+                  type="text"
+                  disabled={!isAdmin}
+                  value={rollNumber}
+                  onChange={(e) => setRollNumber(e.target.value)}
+                  placeholder="e.g. CS-101"
+                  className={`w-full px-3.5 py-2 text-xs font-mono rounded-xl ${
+                    !isAdmin
+                      ? 'bg-white/5 border border-white/5 text-slate-400 cursor-not-allowed'
+                      : 'bg-black/40 border border-white/15 text-white focus:border-purple-500'
+                  }`}
+                />
+              </div>
+
+              {/* Protected Class */}
+              <div>
+                <label className="block text-xs font-semibold text-slate-300 mb-1 flex items-center justify-between">
+                  <span>Class</span>
+                  {!isAdmin && <span className="text-[10px] text-amber-400 font-normal">Protected</span>}
+                </label>
+                <input
+                  type="text"
+                  disabled
+                  value={assignedClass?.name || 'B.Tech Computer Science'}
+                  className="w-full px-3.5 py-2 text-xs rounded-xl bg-white/5 border border-white/5 text-slate-400 cursor-not-allowed"
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <div>
+                <label className="block text-xs font-semibold text-slate-300 mb-1">Division / Section</label>
+                <input
+                  type="text"
+                  value={classDivision}
+                  onChange={(e) => setClassDivision(e.target.value)}
+                  placeholder="e.g. Division A"
+                  className="w-full px-3.5 py-2 text-xs bg-black/40 border border-white/15 rounded-xl text-white focus:outline-none focus:border-purple-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-300 mb-1">Grade Level</label>
+                <input
+                  type="text"
+                  list="profile-grade-presets"
+                  value={gradeLevel}
+                  onChange={(e) => setGradeLevel(e.target.value)}
+                  placeholder="e.g. Year 3 / Semester 5"
+                  className="w-full px-3.5 py-2 text-xs bg-black/40 border border-purple-500/50 rounded-xl text-white font-medium focus:outline-none focus:border-purple-400"
+                />
+                <datalist id="profile-grade-presets">
+                  <option value="First Year" />
+                  <option value="Second Year" />
+                  <option value="Third Year" />
+                  <option value="Final Year" />
+                  <option value="Year 3 / Semester 5" />
+                  <option value="Year 3 / Semester 6" />
+                  <option value="Grade 11" />
+                  <option value="Grade 12" />
+                </datalist>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-300 mb-1">Caste / Category</label>
+                <input
+                  type="text"
+                  value={casteCategory}
+                  onChange={(e) => setCasteCategory(e.target.value)}
+                  placeholder="e.g. General, OBC, SC, ST"
+                  className="w-full px-3.5 py-2 text-xs bg-black/40 border border-white/15 rounded-xl text-white focus:outline-none focus:border-purple-500"
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-xs font-semibold text-slate-300 mb-1">Department / Branch</label>
+                <input
+                  type="text"
+                  value={departmentBranch}
+                  onChange={(e) => setDepartmentBranch(e.target.value)}
+                  placeholder="e.g. Computer Engineering"
+                  className="w-full px-3.5 py-2 text-xs bg-black/40 border border-white/15 rounded-xl text-white focus:outline-none focus:border-purple-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-300 mb-1">Residential Address</label>
+                <input
+                  type="text"
+                  value={residentialAddress}
+                  onChange={(e) => setResidentialAddress(e.target.value)}
+                  placeholder="Street Address, City, Postal Code"
+                  className="w-full px-3.5 py-2 text-xs bg-black/40 border border-white/15 rounded-xl text-white focus:outline-none focus:border-purple-500"
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* SECTION B: PARENT / GUARDIAN DETAILS (For Students) */}
+          {isStudent && (
+            <div className="pt-4 border-t border-white/10 space-y-4">
+              <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-pink-300">
+                <Users className="w-4 h-4" />
+                <span>Section B: Parent / Guardian Details</span>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
                 <div>
-                  <label className="block text-xs font-semibold text-slate-300 mb-1">
-                    Roll Number / Student ID
-                  </label>
+                  <label className="block text-xs font-semibold text-slate-300 mb-1">Father's Name</label>
                   <input
                     type="text"
-                    value={rollNumber}
-                    onChange={(e) => setRollNumber(e.target.value)}
-                    placeholder="e.g. CS-101"
+                    value={fatherName}
+                    onChange={(e) => setFatherName(e.target.value)}
+                    placeholder="Father's Name"
+                    className="w-full px-3.5 py-2 text-xs bg-black/40 border border-white/15 rounded-xl text-white focus:outline-none focus:border-purple-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-300 mb-1">Father's Phone Number</label>
+                  <input
+                    type="text"
+                    value={fatherContact}
+                    onChange={(e) => setFatherContact(e.target.value)}
+                    placeholder="e.g. +91 98200 11223"
                     className="w-full px-3.5 py-2 text-xs bg-black/40 border border-white/15 rounded-xl text-white font-mono focus:outline-none focus:border-purple-500"
                   />
                 </div>
 
-                {/* Grade Level - Manual Entry with Datalist Suggestions */}
                 <div>
-                  <label className="block text-xs font-semibold text-slate-300 mb-1">
-                    Grade Level (Manual Entry) *
-                  </label>
+                  <label className="block text-xs font-semibold text-slate-300 mb-1">Father's Occupation</label>
                   <input
                     type="text"
-                    list="profile-grade-presets"
-                    value={gradeLevel}
-                    onChange={(e) => setGradeLevel(e.target.value)}
-                    placeholder="e.g. First Year, TY Computer Engineering"
-                    className="w-full px-3.5 py-2 text-xs bg-black/40 border border-purple-500/50 rounded-xl text-white font-medium focus:outline-none focus:border-purple-400"
-                  />
-                  <datalist id="profile-grade-presets">
-                    <option value="First Year" />
-                    <option value="Second Year" />
-                    <option value="Third Year" />
-                    <option value="Final Year" />
-                    <option value="FY Computer Engineering" />
-                    <option value="SY Computer Engineering" />
-                    <option value="TY Computer Engineering" />
-                    <option value="Grade 11" />
-                    <option value="Grade 12" />
-                  </datalist>
-                  <span className="text-[10px] text-slate-400 mt-0.5 block">
-                    Freeform entry allowed. Type custom year or branch.
-                  </span>
-                </div>
-
-                {/* Department / Branch */}
-                <div>
-                  <label className="block text-xs font-semibold text-slate-300 mb-1">
-                    Department / Branch
-                  </label>
-                  <input
-                    type="text"
-                    value={departmentBranch}
-                    onChange={(e) => setDepartmentBranch(e.target.value)}
-                    placeholder="e.g. Computer Engineering"
-                    className="w-full px-3.5 py-2 text-xs bg-black/40 border border-white/15 rounded-xl text-white focus:outline-none focus:border-purple-500"
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                {/* Class / Division */}
-                <div>
-                  <label className="block text-xs font-semibold text-slate-300 mb-1">
-                    Class / Division
-                  </label>
-                  <input
-                    type="text"
-                    value={classDivision}
-                    onChange={(e) => setClassDivision(e.target.value)}
-                    placeholder="e.g. Division A, Lab Group 2"
+                    value={fatherOccupation}
+                    onChange={(e) => setFatherOccupation(e.target.value)}
+                    placeholder="e.g. Electrical Engineer"
                     className="w-full px-3.5 py-2 text-xs bg-black/40 border border-white/15 rounded-xl text-white focus:outline-none focus:border-purple-500"
                   />
                 </div>
 
-                {/* Guardian Contact */}
                 <div>
-                  <label className="block text-xs font-semibold text-slate-300 mb-1">
-                    Guardian Contact Phone
-                  </label>
+                  <label className="block text-xs font-semibold text-slate-300 mb-1">Father's Address</label>
+                  <input
+                    type="text"
+                    value={fatherAddress}
+                    onChange={(e) => setFatherAddress(e.target.value)}
+                    placeholder="Residential or Office Address"
+                    className="w-full px-3.5 py-2 text-xs bg-black/40 border border-white/15 rounded-xl text-white focus:outline-none focus:border-purple-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-300 mb-1">Mother's Name</label>
+                  <input
+                    type="text"
+                    value={motherName}
+                    onChange={(e) => setMotherName(e.target.value)}
+                    placeholder="Mother's Name"
+                    className="w-full px-3.5 py-2 text-xs bg-black/40 border border-white/15 rounded-xl text-white focus:outline-none focus:border-purple-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-300 mb-1">Mother's Phone Number</label>
+                  <input
+                    type="text"
+                    value={motherContact}
+                    onChange={(e) => setMotherContact(e.target.value)}
+                    placeholder="e.g. +91 98200 11224"
+                    className="w-full px-3.5 py-2 text-xs bg-black/40 border border-white/15 rounded-xl text-white font-mono focus:outline-none focus:border-purple-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-300 mb-1">Mother's Occupation</label>
+                  <input
+                    type="text"
+                    value={motherOccupation}
+                    onChange={(e) => setMotherOccupation(e.target.value)}
+                    placeholder="e.g. Lecturer"
+                    className="w-full px-3.5 py-2 text-xs bg-black/40 border border-white/15 rounded-xl text-white focus:outline-none focus:border-purple-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-300 mb-1">Mother's Address</label>
+                  <input
+                    type="text"
+                    value={motherAddress}
+                    onChange={(e) => setMotherAddress(e.target.value)}
+                    placeholder="Residential or Office Address"
+                    className="w-full px-3.5 py-2 text-xs bg-black/40 border border-white/15 rounded-xl text-white focus:outline-none focus:border-purple-500"
+                  />
+                </div>
+
+                <div className="sm:col-span-2">
+                  <label className="block text-xs font-semibold text-slate-300 mb-1">Primary Guardian Contact Phone</label>
                   <input
                     type="text"
                     value={guardianContact}
                     onChange={(e) => setGuardianContact(e.target.value)}
-                    placeholder="e.g. +91 9876543210"
+                    placeholder="e.g. +91 98200 11223"
                     className="w-full px-3.5 py-2 text-xs bg-black/40 border border-white/15 rounded-xl text-white font-mono focus:outline-none focus:border-purple-500"
                   />
                 </div>
@@ -256,7 +479,7 @@ export const ProfileView: React.FC = () => {
             </div>
           )}
 
-          {/* Teacher Specific Academic Fields */}
+          {/* Teacher Academic Profile */}
           {isTeacher && (
             <div className="pt-4 border-t border-white/10 space-y-4">
               <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-purple-300">
@@ -288,59 +511,6 @@ export const ProfileView: React.FC = () => {
               </div>
             </div>
           )}
-
-          {/* Personal & Contact Details */}
-          <div className="pt-4 border-t border-white/10 space-y-4">
-            <div className="text-xs font-bold uppercase tracking-wider text-purple-300">
-              Personal &amp; Contact Information
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-              <div>
-                <label className="block text-xs font-semibold text-slate-300 mb-1">Full Legal Name *</label>
-                <input
-                  type="text"
-                  required
-                  value={fullName}
-                  onChange={(e) => setFullName(e.target.value)}
-                  className="w-full px-3.5 py-2 text-xs bg-black/40 border border-white/15 rounded-xl text-white focus:outline-none focus:border-purple-500"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold text-slate-300 mb-1">Email Address *</label>
-                <input
-                  type="email"
-                  required
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  className="w-full px-3.5 py-2 text-xs bg-black/40 border border-white/15 rounded-xl text-white font-mono focus:outline-none focus:border-purple-500"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold text-slate-300 mb-1">Contact Phone</label>
-                <input
-                  type="text"
-                  value={phone}
-                  onChange={(e) => setPhone(e.target.value)}
-                  placeholder="e.g. +91 9876543210"
-                  className="w-full px-3.5 py-2 text-xs bg-black/40 border border-white/15 rounded-xl text-white font-mono focus:outline-none focus:border-purple-500"
-                />
-              </div>
-            </div>
-
-            <div>
-              <label className="block text-xs font-semibold text-slate-300 mb-1">Residential Address</label>
-              <input
-                type="text"
-                value={residentialAddress}
-                onChange={(e) => setResidentialAddress(e.target.value)}
-                placeholder="Street Address, City, Postal Code"
-                className="w-full px-3.5 py-2 text-xs bg-black/40 border border-white/15 rounded-xl text-white focus:outline-none focus:border-purple-500"
-              />
-            </div>
-          </div>
 
           {/* Status Feedback */}
           {saveError && (

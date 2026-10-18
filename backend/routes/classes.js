@@ -12,12 +12,42 @@ router.use(tenantAuth);
  */
 router.get('/', async (req, res) => {
   try {
-    const classes = await req.tenantDb.Class.find().sort({ createdAt: -1 });
-    const formatted = classes.map((c) => ({
-      ...c.toObject(),
-      id: c._id.toString(),
-      studentCount: c.studentIds?.length || 0,
-    }));
+    const role = req.user?.role || 'admin';
+    const userId = req.user?.id;
+    let query = {};
+
+    if (role === 'teacher' && userId && userId !== 'system') {
+      const teacher = await req.tenantDb.User.findById(userId).catch(() => null);
+      const assigned = (teacher?.assignedClassIds || []).map(String);
+      query = {
+        $or: [
+          ...(assigned.length > 0 ? [{ _id: { $in: assigned } }, { id: { $in: assigned } }] : []),
+          { primaryTeacherId: String(userId) },
+        ],
+      };
+    } else if (role === 'student' && userId && userId !== 'system') {
+      const student = await req.tenantDb.User.findById(userId).catch(() => null);
+      const studentClassId = student?.assignedClassId || (student?.assignedClassIds && student.assignedClassIds[0]);
+      if (studentClassId) {
+        query = {
+          $or: [{ _id: String(studentClassId) }, { id: String(studentClassId) }],
+        };
+      } else {
+        return res.json({ classes: [], count: 0 });
+      }
+    }
+
+    const classes = await req.tenantDb.Class.find(query).sort({ createdAt: -1 });
+    const formatted = classes.map((c) => {
+      const cObj = c.toObject ? c.toObject() : { ...c };
+      const id = c._id ? c._id.toString() : c.id;
+      return {
+        ...cObj,
+        id,
+        studentIds: role === 'student' ? (cObj.studentIds || []).filter((sId) => String(sId) === String(userId)) : (cObj.studentIds || []),
+        studentCount: c.studentIds?.length || 0,
+      };
+    });
     res.json({ classes: formatted, count: formatted.length });
   } catch (err) {
     res.status(500).json({ error: 'FetchClassesError', message: err.message });
