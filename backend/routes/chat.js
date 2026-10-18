@@ -1,5 +1,6 @@
 import express from 'express';
 import { tenantAuth } from '../middleware/tenantAuth.js';
+import { broadcastChatMessage } from '../websocket.js';
 
 const router = express.Router();
 router.use(tenantAuth);
@@ -326,6 +327,13 @@ router.post('/messages', async (req, res) => {
     msgObj.text = rawText;
     msgObj.content = rawText;
     msgObj.message = rawText;
+
+    // Real-time WebSocket delivery
+    try {
+      broadcastChatMessage(msgObj);
+    } catch (wsErr) {
+      console.warn('[WebSocket Broadcast Warning]', wsErr.message);
+    }
 
     res.status(201).json({ success: true, message: msgObj });
   } catch (err) {
