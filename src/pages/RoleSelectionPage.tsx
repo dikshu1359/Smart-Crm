@@ -468,17 +468,17 @@ export const RoleSelectionPage: React.FC<RoleSelectionProps> = ({ initialRole })
                 {role === 'admin' ? (
                   <div>
                     <label className="block text-xs font-semibold text-slate-300 mb-1.5">
-                      Institution Name
+                      Institution Name (Optional)
                     </label>
                     <input
                       type="text"
                       value={adminInstitutionName}
                       onChange={(e) => setAdminInstitutionName(e.target.value)}
-                      placeholder="Enter your institution's name"
+                      placeholder="Enter institution name or leave blank to auto-detect"
                       className="w-full px-3.5 py-2.5 text-xs rounded-xl bg-black/40 border border-white/10 text-white focus:outline-none focus:border-purple-500"
                     />
                     <p className="text-[11px] text-slate-400 mt-1">
-                      Enter the registered institution name associated with this administrator account.
+                      Optional: Leave blank to auto-detect your institution across registered databases.
                     </p>
                   </div>
                 ) : (
