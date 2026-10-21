@@ -24,6 +24,7 @@ import {
   AuditLogConsole,
 } from './components/TenantAndAuditManager';
 import { ProfileView } from './components/ProfileView';
+import { StudyAI } from './components/StudyAI';
 import { DashboardAnimatedBackground } from './components/DashboardAnimatedBackground';
 import { PrintableDossier } from './components/PrintableDossier';
 
@@ -108,7 +109,9 @@ const CRMWorkspaceShell: React.FC = () => {
             currentUser.role !== 'admin' ? <QuizManagement /> : <DashboardOverview />
           )}
 
-          {activeTab === 'marks' && <MarksSpreadsheet />}
+          {/* Marks Spreadsheet: Teacher and Student only. Admin monitors via Performance Analytics */}
+          {activeTab === 'marks' && (currentUser.role !== 'admin' ? <MarksSpreadsheet /> : <PerformanceAnalytics />)}
+          {activeTab === 'study-ai' && (currentUser.role !== 'admin' ? <StudyAI /> : <DashboardOverview />)}
           {activeTab === 'roster' && (currentUser.role === 'admin' ? <StudentRosterImport /> : <TeacherStudentRoster />)}
           {activeTab === 'schedule' && <ScheduleManagement />}
           {activeTab === 'calendar' && <AcademicCalendar />}

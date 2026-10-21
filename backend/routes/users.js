@@ -227,6 +227,160 @@ router.post('/', authorizeRoles('admin'), async (req, res) => {
 });
 
 /**
+ * POST /api/users/batch
+ * Administrator bulk creates teacher and/or student accounts from validated preview table.
+ */
+router.post('/batch', authorizeRoles('admin'), async (req, res) => {
+  try {
+    const rawUsers = req.body.users;
+    if (!Array.isArray(rawUsers) || rawUsers.length === 0) {
+      return res.status(400).json({
+        error: 'MissingUsers',
+        message: 'No user records provided for batch import.',
+      });
+    }
+
+    const createdUsers = [];
+    const errors = [];
+    const seenUsernames = new Set();
+    const seenEmails = new Set();
+
+    for (let i = 0; i < rawUsers.length; i++) {
+      const row = rawUsers[i];
+      const rowNum = i + 1;
+      const fullName = (row.fullName || row.name || '').trim();
+      const rawUser = (row.username || row.loginId || '').trim().toLowerCase();
+      const rawEmail = (row.email || '').trim().toLowerCase();
+      const role = (row.role || 'student').trim().toLowerCase();
+      const rollNumber = (row.rollNumber || row.roll || row.teacherId || row.employeeId || '').trim();
+      const initialPassword = (row.password || row.initialPassword || '').trim() || `${role === 'teacher' ? 'Faculty' : 'Student'}#${Math.floor(1000 + Math.random() * 9000)}`;
+      const gradeLevel = (row.gradeLevel || 'First Year').trim();
+      const departmentBranch = (row.departmentBranch || 'Computer Engineering').trim();
+      const classDivision = (row.classDivision || 'Section A').trim();
+      const assignedClassId = row.assignedClassId || '';
+
+      if (!fullName) {
+        errors.push({ row: rowNum, identifier: rawUser || `Row ${rowNum}`, reason: 'Full Name is required.' });
+        continue;
+      }
+
+      if (!rawUser) {
+        errors.push({ row: rowNum, identifier: fullName, reason: 'Username / Login ID is required.' });
+        continue;
+      }
+
+      if (!rawEmail || !rawEmail.includes('@')) {
+        errors.push({ row: rowNum, identifier: rawUser, reason: 'A valid email address is required.' });
+        continue;
+      }
+
+      if (!['teacher', 'student'].includes(role)) {
+        errors.push({ row: rowNum, identifier: rawUser, reason: 'Role must be either "teacher" or "student".' });
+        continue;
+      }
+
+      if (seenUsernames.has(rawUser)) {
+        errors.push({ row: rowNum, identifier: rawUser, reason: `Duplicate username "${rawUser}" found within this import batch.` });
+        continue;
+      }
+
+      if (seenEmails.has(rawEmail)) {
+        errors.push({ row: rowNum, identifier: rawEmail, reason: `Duplicate email "${rawEmail}" found within this import batch.` });
+        continue;
+      }
+
+      // Check against database
+      const existingUser = await req.tenantDb.User.findOne({
+        $or: [{ username: rawUser }, { email: rawEmail }],
+      });
+      if (existingUser) {
+        const isUserMatch = existingUser.username === rawUser;
+        errors.push({
+          row: rowNum,
+          identifier: rawUser,
+          reason: isUserMatch
+            ? `Username "${rawUser}" already exists in this institution.`
+            : `Email "${rawEmail}" already exists in this institution.`,
+        });
+        continue;
+      }
+
+      seenUsernames.add(rawUser);
+      seenEmails.add(rawEmail);
+
+      const passwordHash = bcrypt.hashSync(initialPassword, 10);
+      const userPayload = {
+        username: rawUser,
+        passwordHash,
+        fullName,
+        email: rawEmail,
+        role,
+        databaseName: req.databaseName,
+        phone: row.phone || '',
+        specialization: role === 'teacher' ? (row.specialization || 'General Faculty') : '',
+        qualification: role === 'teacher' ? (row.qualification || 'M.Tech / Ph.D') : '',
+        assignedClassIds: role === 'teacher' && assignedClassId ? [assignedClassId] : (row.assignedClassIds || []),
+        rollNumber,
+        gradeLevel,
+        departmentBranch,
+        classDivision,
+        admissionId: row.admissionId || `ADM-${Date.now().toString().slice(-4)}`,
+        academicYear: row.academicYear || '2025-2026',
+        assignedClassId: role === 'student' ? assignedClassId : '',
+        mustChangePassword: true,
+        status: 'active',
+      };
+
+      const newUser = await req.tenantDb.User.create(userPayload);
+      const newUserId = newUser._id ? newUser._id.toString() : newUser.id;
+
+      // Update class associations if specified
+      if (role === 'student' && assignedClassId) {
+        await req.tenantDb.Class.findByIdAndUpdate(assignedClassId, {
+          $addToSet: { studentIds: newUserId },
+        }).catch(() => null);
+      } else if (role === 'teacher' && assignedClassId) {
+        await req.tenantDb.Class.findByIdAndUpdate(assignedClassId, {
+          primaryTeacherId: newUserId,
+        }).catch(() => null);
+      }
+
+      createdUsers.push({
+        id: newUserId,
+        fullName,
+        username: rawUser,
+        email: rawEmail,
+        role,
+        rollNumber,
+        initialPassword,
+        status: 'Created',
+      });
+    }
+
+    if (createdUsers.length > 0) {
+      await dbManager.logActivity({
+        databaseName: req.databaseName,
+        institutionName: req.user?.institutionName || '',
+        actorName: req.user?.fullName || 'Admin',
+        actorRole: 'admin',
+        actionCategory: 'USER_BATCH_IMPORT',
+        description: `Batch imported ${createdUsers.length} user accounts (${createdUsers.filter((u) => u.role === 'teacher').length} teachers, ${createdUsers.filter((u) => u.role === 'student').length} students).`,
+      }).catch(() => null);
+    }
+
+    res.status(200).json({
+      success: true,
+      createdCount: createdUsers.length,
+      failedCount: errors.length,
+      createdUsers,
+      errors,
+    });
+  } catch (err) {
+    res.status(500).json({ error: 'BatchImportError', message: err.message });
+  }
+});
+
+/**
  * PUT /api/users/:id
  * Update user details & extended profile attributes
  */

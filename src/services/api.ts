@@ -134,6 +134,48 @@ export const api = {
     return res.json();
   },
 
+  async batchCreateUsers(
+    databaseName: string,
+    users: any[]
+  ): Promise<{
+    success: boolean;
+    message?: string;
+    createdCount?: number;
+    failedCount?: number;
+    createdUsers?: any[];
+    errors?: any[];
+  }> {
+    const res = await fetch(`${BASE_URL}/users/batch`, {
+      method: 'POST',
+      headers: getAuthHeaders(databaseName),
+      body: JSON.stringify({ users }),
+    });
+    return safeJson(res, { success: false, message: 'Batch user creation request failed.' });
+  },
+
+  // Study AI
+  async askStudyAI(
+    databaseName: string,
+    prompt: string,
+    history?: { role: 'user' | 'model'; content: string }[],
+    attachment?: { name: string; mimeType: string; data: string; textContent?: string }
+  ): Promise<{
+    success: boolean;
+    message?: string;
+    text?: string;
+    model?: string;
+  }> {
+    const res = await fetch(`${BASE_URL}/ai/chat`, {
+      method: 'POST',
+      headers: getAuthHeaders(databaseName),
+      body: JSON.stringify({ prompt, history, attachment }),
+    });
+    return safeJson(res, {
+      success: false,
+      message: 'Failed to communicate with Study AI service.',
+    });
+  },
+
   // Classes
   async getClasses(databaseName: string) {
     const res = await fetch(`${BASE_URL}/classes`, {

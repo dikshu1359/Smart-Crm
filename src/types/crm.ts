@@ -346,5 +346,6 @@ export type DashboardTab =
   | 'chat'
   | 'tenants'
   | 'audit'
-  | 'profile';
+  | 'profile'
+  | 'study-ai';
 

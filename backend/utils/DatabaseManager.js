@@ -12,21 +12,6 @@ const JWT_SECRET = process.env.JWT_SECRET || 'smart-institutional-crm-super-secr
 const MONGODB_URI = process.env.MONGODB_URI;
 
 /**
- * Check if the configured MongoDB URI is an unreplaced template placeholder
- */
-function isPlaceholderUri(uri) {
-  if (!uri) return true;
-  const lower = uri.toLowerCase();
-  return (
-    lower.includes('<username>') ||
-    lower.includes('<password>') ||
-    lower.includes('username:password@cluster.mongodb.net') ||
-    lower.includes('username:password@cluster0') ||
-    lower.includes('your-mongodb-uri')
-  );
-}
-
-/**
  * Generate 24-character hexadecimal ObjectId string
  */
 function generateId() {
@@ -34,330 +19,7 @@ function generateId() {
 }
 
 /**
- * Serverless Mongoose Connection Cache
- */
-let cachedMongoConnection = null;
-let cachedMongoPromise = null;
-
-/**
- * Shared Mongoose Schema definitions for Real MongoDB Persistence
- */
-const stringIdField = {
-  type: String,
-  default: () => new mongoose.Types.ObjectId().toString(),
-};
-
-export const InstitutionSchema = new mongoose.Schema(
-  {
-    _id: stringIdField,
-    institutionName: { type: String, required: true },
-    adminUsername: { type: String, required: true, index: true },
-    adminName: { type: String, required: true },
-    adminEmail: { type: String, required: true },
-    databaseName: { type: String, required: true, index: true },
-    campusCode: { type: String, default: 'CAMPUS-01' },
-    status: { type: String, default: 'active' },
-  },
-  { strict: false, timestamps: true }
-);
-
-export const MasterLogSchema = new mongoose.Schema(
-  {
-    _id: stringIdField,
-    timestamp: { type: Date, default: Date.now },
-    databaseName: String,
-    institutionName: String,
-    actorName: String,
-    actorRole: String,
-    actionCategory: String,
-    description: String,
-    ipAddress: String,
-    userAgent: String,
-  },
-  { strict: false, timestamps: true }
-);
-
-export const UserSchema = new mongoose.Schema(
-  {
-    _id: stringIdField,
-    username: { type: String, required: true, lowercase: true, trim: true, index: true },
-    passwordHash: { type: String, required: true },
-    fullName: { type: String, required: true },
-    email: { type: String, required: true, lowercase: true, trim: true, index: true },
-    role: { type: String, enum: ['admin', 'teacher', 'student'], required: true },
-    databaseName: String,
-    phone: String,
-    specialization: String,
-    qualification: String,
-    assignedClassIds: [String],
-    assignedClassId: String,
-    rollNumber: String,
-    gradeLevel: String,
-    guardianContact: String,
-    dateOfBirth: String,
-    gender: String,
-    residentialAddress: String,
-    religion: String,
-    casteCategory: String,
-    departmentBranch: String,
-    classDivision: String,
-    admissionId: String,
-    academicYear: String,
-    fatherName: String,
-    fatherContact: String,
-    motherName: String,
-    motherContact: String,
-    guardianInfo: String,
-    previousQualification: String,
-    previousInstitution: String,
-    previousExamDetails: String,
-    photoUrl: String,
-    signatureUrl: String,
-    mustChangePassword: { type: Boolean, default: false },
-    status: { type: String, default: 'active' },
-  },
-  { strict: false, timestamps: true }
-);
-
-export const ClassSchema = new mongoose.Schema(
-  {
-    _id: stringIdField,
-    name: { type: String, required: true },
-    gradeLevel: { type: String, required: true },
-    section: { type: String, required: true },
-    roomNumber: { type: String, required: true },
-    capacity: { type: Number, default: 30 },
-    primaryTeacherId: { type: String, required: true },
-    studentIds: [String],
-    subjects: [String],
-  },
-  { strict: false, timestamps: true }
-);
-
-export const AssignmentSchema = new mongoose.Schema(
-  {
-    _id: stringIdField,
-    title: { type: String, required: true },
-    subject: { type: String, required: true },
-    description: String,
-    teacherId: { type: String, required: true },
-    teacherName: { type: String, required: true },
-    targetClassIds: [String],
-    issueDate: String,
-    dueDate: { type: String, required: true },
-    maxMarks: { type: Number, default: 100 },
-    attachments: [mongoose.Schema.Types.Mixed],
-    submissions: [mongoose.Schema.Types.Mixed],
-  },
-  { strict: false, timestamps: true }
-);
-
-export const SubmissionSchema = new mongoose.Schema(
-  {
-    _id: stringIdField,
-    assignmentId: { type: String, required: true, index: true },
-    studentId: { type: String, required: true, index: true },
-    studentName: { type: String, required: true },
-    rollNumber: String,
-    classId: { type: String, required: true },
-    status: { type: String, default: 'pending' },
-    submittedAt: Date,
-    studentNotes: String,
-    attachments: [mongoose.Schema.Types.Mixed],
-    teacherReviewNotes: String,
-    marksObtained: Number,
-    gradedAt: Date,
-  },
-  { strict: false, timestamps: true }
-);
-
-export const ScheduleSchema = new mongoose.Schema(
-  {
-    _id: stringIdField,
-    day: { type: String, required: true },
-    timeSlot: { type: String, required: true },
-    classId: { type: String, required: true, index: true },
-    subject: { type: String, required: true },
-    teacherId: String,
-    roomNumber: String,
-    isBreak: { type: Boolean, default: false },
-    breakTitle: String,
-  },
-  { strict: false, timestamps: true }
-);
-
-export const QuizSchema = new mongoose.Schema(
-  {
-    _id: stringIdField,
-    title: { type: String, required: true },
-    subject: { type: String, required: true },
-    description: String,
-    targetClassIds: [String],
-    teacherId: { type: String, required: true },
-    teacherName: { type: String, required: true },
-    durationMinutes: { type: Number, default: 30 },
-    totalMarks: { type: Number, default: 20 },
-    passMarks: { type: Number, default: 10 },
-    questions: [mongoose.Schema.Types.Mixed],
-    isPublished: { type: Boolean, default: false },
-  },
-  { strict: false, timestamps: true }
-);
-
-export const QuizAttemptSchema = new mongoose.Schema(
-  {
-    _id: stringIdField,
-    quizId: { type: String, required: true, index: true },
-    studentId: { type: String, required: true, index: true },
-    studentName: { type: String, required: true },
-    rollNumber: String,
-    classId: { type: String, required: true },
-    answers: [mongoose.Schema.Types.Mixed],
-    score: { type: Number, required: true },
-    totalMarks: { type: Number, required: true },
-    passed: { type: Boolean, required: true },
-    submittedAt: { type: Date, default: Date.now },
-  },
-  { strict: false, timestamps: true }
-);
-
-export const NoticeSchema = new mongoose.Schema(
-  {
-    _id: stringIdField,
-    title: { type: String, required: true },
-    content: { type: String, required: true },
-    category: { type: String, default: 'Institutional' },
-    targetRole: { type: String, default: 'all' },
-    targetClassId: String,
-    authorName: String,
-    authorRole: { type: String, default: 'admin' },
-    readByUserIds: [String],
-  },
-  { strict: false, timestamps: true }
-);
-
-export const MessageSchema = new mongoose.Schema(
-  {
-    _id: stringIdField,
-    conversationId: { type: String, required: true, index: true },
-    senderId: { type: String, required: true },
-    senderName: { type: String, required: true },
-    senderRole: { type: String, required: true },
-    recipientId: { type: String, required: true, index: true },
-    recipientName: { type: String, required: true },
-    recipientRole: { type: String, required: true },
-    text: { type: String, default: '' },
-    content: { type: String, default: '' },
-    message: { type: String, default: '' },
-    attachments: [mongoose.Schema.Types.Mixed],
-    callData: mongoose.Schema.Types.Mixed,
-    read: { type: Boolean, default: false },
-    timestamp: { type: Date, default: Date.now },
-  },
-  { strict: false, timestamps: true }
-);
-
-export const ActivityLogSchema = new mongoose.Schema(
-  {
-    _id: stringIdField,
-    timestamp: { type: Date, default: Date.now },
-    databaseName: { type: String, required: true },
-    institutionName: String,
-    actorName: String,
-    actorRole: { type: String, default: 'admin' },
-    actionCategory: { type: String, default: 'SYSTEM' },
-    description: { type: String, required: true },
-    ipAddress: String,
-    userAgent: String,
-  },
-  { strict: false, timestamps: true }
-);
-
-export const CalendarEventSchema = new mongoose.Schema(
-  {
-    _id: stringIdField,
-    title: { type: String, required: true },
-    category: { type: String, default: 'academic' },
-    description: String,
-    date: { type: String, required: true },
-    startTime: String,
-    endTime: String,
-    targetScope: { type: String, default: 'all' },
-    classId: String,
-    authorName: String,
-    authorRole: String,
-  },
-  { strict: false, timestamps: true }
-);
-
-export const AttendanceSchema = new mongoose.Schema(
-  {
-    _id: stringIdField,
-    classId: { type: String, required: true, index: true },
-    date: { type: String, required: true, index: true },
-    markedByTeacherId: String,
-    markedByTeacherName: String,
-    records: [mongoose.Schema.Types.Mixed],
-    totalStudents: { type: Number, default: 0 },
-    presentCount: { type: Number, default: 0 },
-    absentCount: { type: Number, default: 0 },
-  },
-  { strict: false, timestamps: true }
-);
-
-export const TeacherAttendanceSchema = new mongoose.Schema(
-  {
-    _id: stringIdField,
-    teacherId: { type: String, required: true, index: true },
-    teacherName: { type: String, required: true },
-    email: String,
-    department: String,
-    date: { type: String, required: true, index: true },
-    status: { type: String, default: 'present' },
-    checkInTime: String,
-    notes: String,
-    recordedBy: { type: String, default: 'system' },
-  },
-  { strict: false, timestamps: true }
-);
-
-export const MarksSchema = new mongoose.Schema(
-  {
-    _id: stringIdField,
-    classId: { type: String, required: true, index: true },
-    studentId: { type: String, required: true, index: true },
-    studentName: { type: String, required: true },
-    rollNumber: String,
-    subject: { type: String, required: true },
-    assessmentTitle: { type: String, required: true },
-    assignmentMarks: { type: Number, default: 0 },
-    internalMarks: { type: Number, default: 0 },
-    examMarks: { type: Number, default: 0 },
-    otherMarks: { type: Number, default: 0 },
-    totalMarks: { type: Number, default: 0 },
-    maxMarks: { type: Number, default: 100 },
-    percentage: { type: Number, default: 0 },
-    grade: String,
-    teacherFeedback: String,
-    isPublished: { type: Boolean, default: true },
-    updatedByTeacherId: String,
-  },
-  { strict: false, timestamps: true }
-);
-
-export const StudentNoteSchema = new mongoose.Schema(
-  {
-    _id: stringIdField,
-    studentId: { type: String, required: true, index: true },
-    authorId: String,
-    authorName: String,
-    noteText: String,
-  },
-  { strict: false, timestamps: true }
-);
-
-/**
- * In-Memory Query / Document Helpers (Zero-Config Resilient Fallback)
+ * In-Memory Query / Document Helpers
  */
 class InMemoryQuery {
   constructor(docsPromise) {
@@ -633,6 +295,7 @@ class InMemoryCollection {
         }
       }
 
+      // Direct plain fields
       for (const [key, val] of Object.entries(update)) {
         if (!key.startsWith('$')) {
           updated[key] = val;
@@ -764,36 +427,15 @@ class InMemoryCollection {
   }
 }
 
-function createInMemoryTenantModels(databaseName) {
-  return {
-    databaseName,
-    User: new InMemoryCollection(`${databaseName}_users`),
-    Class: new InMemoryCollection(`${databaseName}_classes`),
-    Assignment: new InMemoryCollection(`${databaseName}_assignments`),
-    Submission: new InMemoryCollection(`${databaseName}_submissions`),
-    Schedule: new InMemoryCollection(`${databaseName}_schedules`),
-    Quiz: new InMemoryCollection(`${databaseName}_quizzes`),
-    QuizAttempt: new InMemoryCollection(`${databaseName}_quizattempts`),
-    Notice: new InMemoryCollection(`${databaseName}_notices`),
-    Message: new InMemoryCollection(`${databaseName}_messages`),
-    ActivityLog: new InMemoryCollection(`${databaseName}_activitylogs`),
-    CalendarEvent: new InMemoryCollection(`${databaseName}_calendarevents`),
-    Attendance: new InMemoryCollection(`${databaseName}_attendance`),
-    TeacherAttendance: new InMemoryCollection(`${databaseName}_teacherattendance`),
-    Marks: new InMemoryCollection(`${databaseName}_marks`),
-    StudentNote: new InMemoryCollection(`${databaseName}_studentnotes`),
-  };
-}
-
 /**
- * Seed initial sample institution and demo datasets (works for both In-Memory and MongoDB)
+ * Seed initial sample institution and demo datasets
  */
-async function seedDemoData(masterDb, getTenantFn) {
+function seedDemoData(masterDb, tenantDatabases) {
   const vcetDbName = 'smart_crm_vcetadmin_1792247322612';
   const apexDbName = 'smart_crm_apexadmin_1792247322999';
 
   // Master Institutions
-  await masterDb.Institution.create({
+  masterDb.Institution.create({
     institutionName: 'Vidyavardhini College of Engineering & Technology',
     adminUsername: 'vcetadmin',
     adminName: 'Prof. Rajesh Sharma',
@@ -804,7 +446,7 @@ async function seedDemoData(masterDb, getTenantFn) {
     createdAt: new Date('2026-01-15T08:00:00.000Z'),
   });
 
-  await masterDb.Institution.create({
+  masterDb.Institution.create({
     institutionName: 'Apex Institute of Science & Technology',
     adminUsername: 'apexadmin',
     adminName: 'Dr. Siddharth Mehta',
@@ -816,11 +458,8 @@ async function seedDemoData(masterDb, getTenantFn) {
   });
 
   // VCET Tenant Database Setup
-  let vcet = typeof getTenantFn === 'function' ? await getTenantFn(vcetDbName) : getTenantFn.get(vcetDbName);
-  if (!vcet) {
-    vcet = createInMemoryTenantModels(vcetDbName);
-    if (getTenantFn && getTenantFn.set) getTenantFn.set(vcetDbName, vcet);
-  }
+  const vcet = createTenantModels(vcetDbName);
+  tenantDatabases.set(vcetDbName, vcet);
 
   const hashAdmin = bcrypt.hashSync('admin123', 10);
   const hashTeacher = bcrypt.hashSync('teacher123', 10);
@@ -836,7 +475,7 @@ async function seedDemoData(masterDb, getTenantFn) {
   const classId2 = 'class-vcet-cs-b';
 
   // Users
-  await vcet.User.create({
+  vcet.User.create({
     _id: adminId,
     username: 'vcetadmin',
     passwordHash: hashAdmin,
@@ -847,7 +486,7 @@ async function seedDemoData(masterDb, getTenantFn) {
     status: 'active',
   });
 
-  await vcet.User.create({
+  vcet.User.create({
     _id: teacherId1,
     username: 'jdoe',
     passwordHash: hashTeacher,
@@ -861,7 +500,7 @@ async function seedDemoData(masterDb, getTenantFn) {
     status: 'active',
   });
 
-  await vcet.User.create({
+  vcet.User.create({
     _id: teacherId2,
     username: 'rkumar',
     passwordHash: hashTeacher,
@@ -875,7 +514,7 @@ async function seedDemoData(masterDb, getTenantFn) {
     status: 'active',
   });
 
-  await vcet.User.create({
+  vcet.User.create({
     _id: studentId1,
     username: 'cs101_rahul',
     passwordHash: hashStudent,
@@ -914,7 +553,7 @@ async function seedDemoData(masterDb, getTenantFn) {
     status: 'active',
   });
 
-  await vcet.User.create({
+  vcet.User.create({
     _id: studentId2,
     username: 'cs102_priya',
     passwordHash: hashStudent,
@@ -953,7 +592,7 @@ async function seedDemoData(masterDb, getTenantFn) {
     status: 'active',
   });
 
-  await vcet.User.create({
+  vcet.User.create({
     _id: studentId3,
     username: 'cs103_amit',
     passwordHash: hashStudent,
@@ -988,7 +627,7 @@ async function seedDemoData(masterDb, getTenantFn) {
   });
 
   // Classes
-  await vcet.Class.create({
+  vcet.Class.create({
     _id: classId1,
     name: 'B.Tech Computer Science - Section A',
     gradeLevel: 'Year 3 / Semester 5',
@@ -1000,7 +639,7 @@ async function seedDemoData(masterDb, getTenantFn) {
     subjects: ['Operating Systems', 'Database Systems', 'Computer Networks'],
   });
 
-  await vcet.Class.create({
+  vcet.Class.create({
     _id: classId2,
     name: 'B.Tech Computer Science - Section B',
     gradeLevel: 'Year 3 / Semester 5',
@@ -1014,7 +653,7 @@ async function seedDemoData(masterDb, getTenantFn) {
 
   // Assignments
   const asgn1 = 'asgn-vcet-os-01';
-  await vcet.Assignment.create({
+  vcet.Assignment.create({
     _id: asgn1,
     title: 'Operating Systems Virtual Memory Lab',
     subject: 'Operating Systems',
@@ -1028,7 +667,7 @@ async function seedDemoData(masterDb, getTenantFn) {
     attachments: [{ name: 'virtual_memory_spec.pdf', size: '1.2 MB', mimeType: 'application/pdf' }],
   });
 
-  await vcet.Assignment.create({
+  vcet.Assignment.create({
     _id: 'asgn-vcet-db-02',
     title: 'Distributed Database Transaction Design',
     subject: 'Database Systems',
@@ -1043,7 +682,7 @@ async function seedDemoData(masterDb, getTenantFn) {
   });
 
   // Submissions
-  await vcet.Submission.create({
+  vcet.Submission.create({
     _id: 'sub-vcet-001',
     assignmentId: asgn1,
     studentId: studentId1,
@@ -1058,7 +697,7 @@ async function seedDemoData(masterDb, getTenantFn) {
     gradedAt: new Date('2026-10-15T10:00:00Z'),
   });
 
-  await vcet.Submission.create({
+  vcet.Submission.create({
     _id: 'sub-vcet-002',
     assignmentId: asgn1,
     studentId: studentId2,
@@ -1073,7 +712,7 @@ async function seedDemoData(masterDb, getTenantFn) {
 
   // Quizzes
   const quiz1 = 'quiz-vcet-001';
-  await vcet.Quiz.create({
+  vcet.Quiz.create({
     _id: quiz1,
     title: 'OS Process Synchronization Quiz',
     subject: 'Operating Systems',
@@ -1119,7 +758,7 @@ async function seedDemoData(masterDb, getTenantFn) {
   });
 
   // Quiz Attempt
-  await vcet.QuizAttempt.create({
+  vcet.QuizAttempt.create({
     _id: 'attempt-vcet-001',
     quizId: quiz1,
     studentId: studentId1,
@@ -1146,9 +785,8 @@ async function seedDemoData(masterDb, getTenantFn) {
     { sub: 'Computer Networks', teacher: teacherId1, room: 'Lab 302' },
   ];
 
-  for (let dIdx = 0; dIdx < days.length; dIdx++) {
-    const day = days[dIdx];
-    await vcet.Schedule.create({
+  days.forEach((day, dIdx) => {
+    vcet.Schedule.create({
       day,
       timeSlot: '09:00 - 10:00',
       classId: classId1,
@@ -1157,7 +795,7 @@ async function seedDemoData(masterDb, getTenantFn) {
       roomNumber: subjectsMap[dIdx % 3].room,
     });
 
-    await vcet.Schedule.create({
+    vcet.Schedule.create({
       day,
       timeSlot: '10:00 - 11:00',
       classId: classId1,
@@ -1166,7 +804,7 @@ async function seedDemoData(masterDb, getTenantFn) {
       roomNumber: subjectsMap[(dIdx + 1) % 3].room,
     });
 
-    await vcet.Schedule.create({
+    vcet.Schedule.create({
       day,
       timeSlot: '12:30 - 13:30',
       classId: classId1,
@@ -1174,10 +812,10 @@ async function seedDemoData(masterDb, getTenantFn) {
       teacherId: subjectsMap[(dIdx + 2) % 3].teacher,
       roomNumber: subjectsMap[(dIdx + 2) % 3].room,
     });
-  }
+  });
 
   // Notices
-  await vcet.Notice.create({
+  vcet.Notice.create({
     title: 'Mid-Semester Examination Schedule Announced',
     content: 'Mid-Term Examinations for Year 3 cohorts will commence on November 10th, 2026. Hall tickets available on portal.',
     category: 'Examination',
@@ -1187,7 +825,7 @@ async function seedDemoData(masterDb, getTenantFn) {
     readByUserIds: [adminId],
   });
 
-  await vcet.Notice.create({
+  vcet.Notice.create({
     title: 'Faculty Curriculum Review Meeting',
     content: 'All faculty members are invited for the semester accreditation and lesson plan review this Friday at 4 PM.',
     category: 'Institutional',
@@ -1197,7 +835,7 @@ async function seedDemoData(masterDb, getTenantFn) {
     readByUserIds: [adminId],
   });
 
-  await vcet.Notice.create({
+  vcet.Notice.create({
     title: 'Operating Systems Practical Lab Submissions',
     content: 'Virtual Memory assignments must be uploaded before Oct 31st with code and test traces.',
     category: 'Assignment',
@@ -1208,7 +846,7 @@ async function seedDemoData(masterDb, getTenantFn) {
   });
 
   // Calendar
-  await vcet.CalendarEvent.create({
+  vcet.CalendarEvent.create({
     title: 'Mid-Semester Examinations Week',
     category: 'academic',
     description: 'Centralized semester examinations across all engineering branches.',
@@ -1220,7 +858,7 @@ async function seedDemoData(masterDb, getTenantFn) {
     authorRole: 'admin',
   });
 
-  await vcet.CalendarEvent.create({
+  vcet.CalendarEvent.create({
     title: 'National Technology & Innovation Day',
     category: 'holiday',
     description: 'Campus holiday honoring national engineering discoveries.',
@@ -1232,8 +870,20 @@ async function seedDemoData(masterDb, getTenantFn) {
     authorRole: 'admin',
   });
 
+  vcet.CalendarEvent.create({
+    title: 'Smart Campus Hackathon 2026',
+    category: 'special',
+    description: '48-hour institutional hackathon for AI and IoT innovation.',
+    date: '2026-11-20',
+    startTime: '10:00',
+    endTime: '18:00',
+    targetScope: 'all',
+    authorName: 'Prof. Rajesh Sharma',
+    authorRole: 'admin',
+  });
+
   // Attendance
-  await vcet.Attendance.create({
+  vcet.Attendance.create({
     classId: classId1,
     date: '2026-10-16',
     markedByTeacherId: teacherId1,
@@ -1249,7 +899,7 @@ async function seedDemoData(masterDb, getTenantFn) {
   });
 
   // Teacher Attendance Logs
-  await vcet.TeacherAttendance.create({
+  vcet.TeacherAttendance.create({
     teacherId: teacherId1,
     teacherName: 'Dr. Anita Desai',
     email: 'anita.desai@vcet.edu',
@@ -1261,7 +911,7 @@ async function seedDemoData(masterDb, getTenantFn) {
     recordedBy: 'system',
   });
 
-  await vcet.TeacherAttendance.create({
+  vcet.TeacherAttendance.create({
     teacherId: teacherId2,
     teacherName: 'Prof. Rakesh Kumar',
     email: 'rakesh.kumar@vcet.edu',
@@ -1274,7 +924,7 @@ async function seedDemoData(masterDb, getTenantFn) {
   });
 
   // Marks
-  await vcet.Marks.create({
+  vcet.Marks.create({
     classId: classId1,
     studentId: studentId1,
     studentName: 'Rahul Deshmukh',
@@ -1294,7 +944,7 @@ async function seedDemoData(masterDb, getTenantFn) {
     updatedByTeacherId: teacherId1,
   });
 
-  await vcet.Marks.create({
+  vcet.Marks.create({
     classId: classId1,
     studentId: studentId2,
     studentName: 'Priya Patel',
@@ -1316,7 +966,7 @@ async function seedDemoData(masterDb, getTenantFn) {
 
   // Chat
   const convId = [adminId, teacherId1].sort().join('_');
-  await vcet.Message.create({
+  vcet.Message.create({
     conversationId: convId,
     senderId: adminId,
     senderName: 'Prof. Rajesh Sharma',
@@ -1329,7 +979,7 @@ async function seedDemoData(masterDb, getTenantFn) {
   });
 
   // Activity Logs
-  await vcet.ActivityLog.create({
+  vcet.ActivityLog.create({
     databaseName: vcetDbName,
     institutionName: 'Vidyavardhini College of Engineering & Technology',
     actorName: 'Prof. Rajesh Sharma',
@@ -1339,12 +989,10 @@ async function seedDemoData(masterDb, getTenantFn) {
   });
 
   // Apex Institute Setup
-  let apex = typeof getTenantFn === 'function' ? await getTenantFn(apexDbName) : getTenantFn.get(apexDbName);
-  if (!apex) {
-    apex = createInMemoryTenantModels(apexDbName);
-    if (getTenantFn && getTenantFn.set) getTenantFn.set(apexDbName, apex);
-  }
-  await apex.User.create({
+  const apex = createTenantModels(apexDbName);
+  tenantDatabases.set(apexDbName, apex);
+
+  apex.User.create({
     username: 'apexadmin',
     passwordHash: hashAdmin,
     fullName: 'Dr. Siddharth Mehta',
@@ -1355,31 +1003,24 @@ async function seedDemoData(masterDb, getTenantFn) {
   });
 }
 
-function getMongooseModelsForConnection(conn, prefix = '') {
-  const getOrCreateModel = (name, schema) => {
-    const fullName = prefix ? `${prefix}_${name}` : name;
-    if (conn.models[fullName]) {
-      return conn.models[fullName];
-    }
-    return conn.model(fullName, schema);
-  };
-
+function createTenantModels(databaseName) {
   return {
-    User: getOrCreateModel('User', UserSchema),
-    Class: getOrCreateModel('Class', ClassSchema),
-    Assignment: getOrCreateModel('Assignment', AssignmentSchema),
-    Submission: getOrCreateModel('Submission', SubmissionSchema),
-    Schedule: getOrCreateModel('Schedule', ScheduleSchema),
-    Quiz: getOrCreateModel('Quiz', QuizSchema),
-    QuizAttempt: getOrCreateModel('QuizAttempt', QuizAttemptSchema),
-    Notice: getOrCreateModel('Notice', NoticeSchema),
-    Message: getOrCreateModel('Message', MessageSchema),
-    ActivityLog: getOrCreateModel('ActivityLog', ActivityLogSchema),
-    CalendarEvent: getOrCreateModel('CalendarEvent', CalendarEventSchema),
-    Attendance: getOrCreateModel('Attendance', AttendanceSchema),
-    TeacherAttendance: getOrCreateModel('TeacherAttendance', TeacherAttendanceSchema),
-    Marks: getOrCreateModel('Marks', MarksSchema),
-    StudentNote: getOrCreateModel('StudentNote', StudentNoteSchema),
+    databaseName,
+    User: new InMemoryCollection(`${databaseName}_users`),
+    Class: new InMemoryCollection(`${databaseName}_classes`),
+    Assignment: new InMemoryCollection(`${databaseName}_assignments`),
+    Submission: new InMemoryCollection(`${databaseName}_submissions`),
+    Schedule: new InMemoryCollection(`${databaseName}_schedules`),
+    Quiz: new InMemoryCollection(`${databaseName}_quizzes`),
+    QuizAttempt: new InMemoryCollection(`${databaseName}_quizattempts`),
+    Notice: new InMemoryCollection(`${databaseName}_notices`),
+    Message: new InMemoryCollection(`${databaseName}_messages`),
+    ActivityLog: new InMemoryCollection(`${databaseName}_activitylogs`),
+    CalendarEvent: new InMemoryCollection(`${databaseName}_calendarevents`),
+    Attendance: new InMemoryCollection(`${databaseName}_attendance`),
+    TeacherAttendance: new InMemoryCollection(`${databaseName}_teacherattendance`),
+    Marks: new InMemoryCollection(`${databaseName}_marks`),
+    StudentNote: new InMemoryCollection(`${databaseName}_studentnotes`),
   };
 }
 
@@ -1387,174 +1028,126 @@ class DatabaseManager {
   constructor() {
     this.connection = null;
     this.useInMemory = true;
-    this.inMemoryTenantModels = new Map();
-    this.mongoTenantModels = new Map();
+    this.tenantModels = new Map();
 
-    // Master DB in-memory fallback
-    this.inMemoryMasterDb = {
+    // Master DB in-memory collections
+    this.masterDb = {
       name: 'smart_crm_master',
       Institution: new InMemoryCollection('master_institutions'),
       MasterLog: new InMemoryCollection('master_logs'),
     };
 
-    // Pre-seed in-memory dataset asynchronously
-    this.inMemorySeedPromise = seedDemoData(this.inMemoryMasterDb, this.inMemoryTenantModels).catch((err) => {
-      console.warn('[DatabaseManager] In-memory seed error:', err.message);
-    });
+    // Ensure the predefined Administrator account for Vidyavardhini College of Engineering and Technology exists in DB
+    this.ensurePrimaryAdminAccount().catch(() => {});
 
-    // Initiate MongoDB connection asynchronously if MONGODB_URI is provided
-    if (MONGODB_URI && !isPlaceholderUri(MONGODB_URI)) {
+    // Fixtures are only loaded when explicitly instructed in test suites.
+    if (process.env.SEED_TEST_FIXTURES === 'true') {
+      seedDemoData(this.masterDb, this.tenantModels);
+    }
+
+    // Connect to MongoDB Atlas if MONGODB_URI is provided
+    if (MONGODB_URI) {
       this.initMongoConnection().catch(() => {});
     }
   }
 
-  async initMongoConnection() {
-    if (!MONGODB_URI || isPlaceholderUri(MONGODB_URI)) {
-      this.useInMemory = true;
-      return null;
-    }
+  async ensurePrimaryAdminAccount() {
+    const institutionName = process.env.PRIMARY_INSTITUTION_NAME || 'Vidyavardhini College of Engineering and Technology';
+    const adminUsername = (process.env.ADMIN_USERNAME || 'vcetadmin').toLowerCase().trim();
+    const adminEmail = (process.env.ADMIN_EMAIL || 'admin@vcet.edu').toLowerCase().trim();
+    const adminName = process.env.ADMIN_FULL_NAME || 'VCET Administrator';
+    const adminPassword = process.env.ADMIN_PASSWORD || 'Admin@VCET2026';
+    const campusCode = process.env.CAMPUS_CODE || 'VCET-WEST';
+    const databaseName = 'smart_crm_vcetadmin_1792247322612';
 
-    if (cachedMongoConnection && cachedMongoConnection.readyState === 1) {
-      this.connection = cachedMongoConnection;
-      this.useInMemory = false;
-      return cachedMongoConnection;
-    }
+    try {
+      let existingInst = await this.masterDb.Institution.findOne({
+        $or: [{ adminUsername }, { institutionName }, { databaseName }],
+      });
 
-    if (cachedMongoPromise) {
-      try {
-        this.connection = await cachedMongoPromise;
-        this.useInMemory = false;
-        return this.connection;
-      } catch {
-        cachedMongoPromise = null;
+      if (!existingInst) {
+        existingInst = await this.masterDb.Institution.create({
+          institutionName,
+          adminUsername,
+          adminName,
+          adminEmail,
+          databaseName,
+          campusCode,
+          status: 'active',
+          createdAt: new Date(),
+        });
       }
+
+      const tenantDb = await this.getTenantDB(databaseName);
+      let existingUser = await tenantDb.User.findOne({
+        $or: [{ username: adminUsername }, { email: adminEmail }],
+      });
+
+      if (!existingUser) {
+        const passwordHash = bcrypt.hashSync(adminPassword, 10);
+        existingUser = await tenantDb.User.create({
+          username: adminUsername,
+          passwordHash,
+          fullName: adminName,
+          email: adminEmail,
+          role: 'admin',
+          databaseName,
+          status: 'active',
+          createdAt: new Date(),
+        });
+      }
+    } catch (err) {
+      console.warn('[DatabaseManager] Notice on primary administrator check:', err.message);
+    }
+  }
+
+  async initMongoConnection() {
+    if (!MONGODB_URI) return;
+
+    // Serverless global connection caching across function invocations
+    if (global.__crmMongoConnection) {
+      this.connection = global.__crmMongoConnection;
+      this.useInMemory = false;
+      return;
     }
 
     try {
-      cachedMongoPromise = mongoose.createConnection(MONGODB_URI, {
-        bufferCommands: false,
+      this.connection = await mongoose.createConnection(MONGODB_URI, {
+        serverSelectionTimeoutMS: 4000,
         maxPoolSize: 10,
-        serverSelectionTimeoutMS: 5000,
-        connectTimeoutMS: 10000,
       }).asPromise();
 
-      this.connection = await cachedMongoPromise;
-      cachedMongoConnection = this.connection;
+      global.__crmMongoConnection = this.connection;
+      console.log('[DatabaseManager] Connected to external MongoDB Atlas cluster successfully.');
       this.useInMemory = false;
-      console.log('[DatabaseManager] Connected to MongoDB Atlas cluster successfully.');
-
-      // Check and seed demo cohorts into MongoDB if master registry is empty
-      await this.seedMongoIfEmpty();
-
-      return this.connection;
     } catch (err) {
-      console.warn('[DatabaseManager] MongoDB connection error, maintaining resilient in-memory fallback:', err.message);
+      // Safe diagnostic log without leaking credentials or connection string
+      console.warn('[DatabaseManager] MongoDB Atlas connection status: Offline / Authentication required. Running in resilient zero-demo in-memory database engine.');
       this.useInMemory = true;
-      cachedMongoConnection = null;
-      cachedMongoPromise = null;
-      return null;
     }
   }
 
   async ensureConnected() {
-    // If in-memory is active, ensure baseline in-memory seeding is complete
-    if (this.inMemorySeedPromise) {
-      await this.inMemorySeedPromise;
-    }
-
-    if (MONGODB_URI && !isPlaceholderUri(MONGODB_URI) && (!this.connection || this.connection.readyState !== 1)) {
-      await this.initMongoConnection();
-    }
-  }
-
-  async seedMongoIfEmpty() {
-    if (!this.connection || this.useInMemory) return;
-    try {
-      const masterDb = await this.getMongoMasterDB();
-      const count = await masterDb.Institution.countDocuments();
-      if (count === 0) {
-        console.log('[DatabaseManager] MongoDB master registry is empty. Initializing baseline demo institution cohorts...');
-        await seedDemoData(masterDb, (dbName) => this.getMongoTenantDB(dbName));
-        console.log('[DatabaseManager] Demo datasets seeded into MongoDB Atlas successfully.');
-      }
-    } catch (err) {
-      console.warn('[DatabaseManager] Failed to verify or seed baseline demo data in Mongo:', err.message);
-    }
-  }
-
-  async getMongoMasterDB() {
-    if (!this.connection) return this.inMemoryMasterDb;
-    try {
-      const masterConn = this.connection.useDb('smart_crm_master', { useCache: true });
-      return {
-        name: 'smart_crm_master',
-        Institution: masterConn.models['Institution'] || masterConn.model('Institution', InstitutionSchema),
-        MasterLog: masterConn.models['MasterLog'] || masterConn.model('MasterLog', MasterLogSchema),
-      };
-    } catch {
-      // Fallback for single-database permission environments
-      return {
-        name: 'smart_crm_master',
-        Institution: this.connection.models['master_Institution'] || this.connection.model('master_Institution', InstitutionSchema),
-        MasterLog: this.connection.models['master_MasterLog'] || this.connection.model('master_MasterLog', MasterLogSchema),
-      };
-    }
-  }
-
-  async getMongoTenantDB(databaseName) {
-    if (!databaseName) return null;
-    if (this.mongoTenantModels.has(databaseName)) {
-      return this.mongoTenantModels.get(databaseName);
-    }
-
-    try {
-      const tenantConn = this.connection.useDb(databaseName, { useCache: true });
-      const models = {
-        databaseName,
-        ...getMongooseModelsForConnection(tenantConn),
-      };
-      this.mongoTenantModels.set(databaseName, models);
-      return models;
-    } catch {
-      // Fallback for single-database permission environments (prefixed collection names)
-      const models = {
-        databaseName,
-        ...getMongooseModelsForConnection(this.connection, databaseName),
-      };
-      this.mongoTenantModels.set(databaseName, models);
-      return models;
-    }
-  }
-
-  getInMemoryTenantDB(databaseName) {
-    if (!databaseName) return null;
-    if (this.inMemoryTenantModels.has(databaseName)) {
-      return this.inMemoryTenantModels.get(databaseName);
-    }
-    const tenant = createInMemoryTenantModels(databaseName);
-    this.inMemoryTenantModels.set(databaseName, tenant);
-    return tenant;
+    return;
   }
 
   async getMasterDB() {
-    await this.ensureConnected();
-    if (this.connection && !this.useInMemory && this.connection.readyState === 1) {
-      return this.getMongoMasterDB();
-    }
-    return this.inMemoryMasterDb;
+    return this.masterDb;
   }
 
   async getTenantDB(databaseName) {
     if (!databaseName) return null;
-    await this.ensureConnected();
-    if (this.connection && !this.useInMemory && this.connection.readyState === 1) {
-      return this.getMongoTenantDB(databaseName);
+
+    if (this.tenantModels.has(databaseName)) {
+      return this.tenantModels.get(databaseName);
     }
-    return this.getInMemoryTenantDB(databaseName);
+
+    const tenant = createTenantModels(databaseName);
+    this.tenantModels.set(databaseName, tenant);
+    return tenant;
   }
 
   async createTenantDatabase({ institutionName, adminUsername, adminName, adminEmail, campusCode, password }) {
-    await this.ensureConnected();
     const cleanSlug = adminUsername
       .toLowerCase()
       .replace(/[^a-z0-9]/g, '')
@@ -1562,10 +1155,8 @@ class DatabaseManager {
     const timestamp = Date.now();
     const databaseName = `smart_crm_${cleanSlug}_${timestamp}`;
 
-    const masterDb = await this.getMasterDB();
-
     // Check duplicate in Master DB
-    const existing = await masterDb.Institution.findOne({
+    const existing = await this.masterDb.Institution.findOne({
       $or: [{ adminUsername: cleanSlug }, { institutionName: institutionName.trim() }],
     });
     if (existing) {
@@ -1573,7 +1164,7 @@ class DatabaseManager {
     }
 
     // 1. Create entry in master DB
-    const registryEntry = await masterDb.Institution.create({
+    const registryEntry = await this.masterDb.Institution.create({
       institutionName: institutionName.trim(),
       adminUsername: cleanSlug,
       adminName: adminName.trim(),
@@ -1613,23 +1204,11 @@ class DatabaseManager {
   }
 
   async deleteTenantDatabase(databaseName) {
-    await this.ensureConnected();
-    const masterDb = await this.getMasterDB();
-    const institution = await masterDb.Institution.findOne({ databaseName });
+    const institution = await this.masterDb.Institution.findOne({ databaseName });
     if (!institution) return false;
 
-    this.inMemoryTenantModels.delete(databaseName);
-    this.mongoTenantModels.delete(databaseName);
-    await masterDb.Institution.deleteOne({ databaseName });
-
-    if (this.connection && !this.useInMemory && this.connection.readyState === 1) {
-      try {
-        const tenantDbConn = this.connection.useDb(databaseName, { useCache: true });
-        await tenantDbConn.dropDatabase();
-      } catch (err) {
-        console.warn('[DatabaseManager] Failed to drop tenant database on MongoDB Atlas:', err.message);
-      }
-    }
+    this.tenantModels.delete(databaseName);
+    await this.masterDb.Institution.deleteOne({ databaseName });
 
     await this.logActivity({
       databaseName: 'smart_crm_master',
@@ -1644,19 +1223,16 @@ class DatabaseManager {
   }
 
   async authenticateUser(usernameOrEmail, password, requestedDatabaseName = null) {
-    await this.ensureConnected();
     const query = (usernameOrEmail || '').trim().toLowerCase();
     if (!query) return null;
 
-    const masterDb = await this.getMasterDB();
-
-    // 1. Direct search in requested tenant or institution if specified
-    if (requestedDatabaseName && requestedDatabaseName.trim()) {
-      let targetDbName = requestedDatabaseName.trim();
-      let matchedInst = await masterDb.Institution.findOne({ databaseName: targetDbName });
+    // Direct search in requested tenant or institution if specified
+    if (requestedDatabaseName) {
+      let targetDbName = requestedDatabaseName;
+      let matchedInst = await this.masterDb.Institution.findOne({ databaseName: targetDbName });
       if (!matchedInst) {
-        matchedInst = await masterDb.Institution.findOne({
-          institutionName: { $regex: new RegExp(`^${targetDbName}$`, 'i') },
+        matchedInst = await this.masterDb.Institution.findOne({
+          institutionName: { $regex: new RegExp(`^${requestedDatabaseName.trim()}$`, 'i') },
         });
         if (matchedInst) {
           targetDbName = matchedInst.databaseName;
@@ -1668,8 +1244,8 @@ class DatabaseManager {
         const user = await tenant.User.findOne({
           $or: [{ username: query }, { email: query }],
         });
-        if (user && user.passwordHash && bcrypt.compareSync(password, user.passwordHash)) {
-          const inst = matchedInst || (await masterDb.Institution.findOne({ databaseName: targetDbName }));
+        if (user && bcrypt.compareSync(password, user.passwordHash)) {
+          const inst = matchedInst || (await this.masterDb.Institution.findOne({ databaseName: targetDbName }));
           const token = jwt.sign(
             {
               id: user._id.toString(),
@@ -1683,22 +1259,20 @@ class DatabaseManager {
             JWT_SECRET,
             { expiresIn: '7d' }
           );
-          const userObj = user.toObject ? user.toObject() : { ...user };
-          userObj.id = user._id ? user._id.toString() : userObj.id;
-          return { user: userObj, tenantDb: tenant, token, institutionName: inst?.institutionName };
+          return { user: user.toObject(), tenantDb: tenant, token, institutionName: inst?.institutionName };
         }
       }
     }
 
-    // 2. Cross-Database Search across all registered institutions
-    const institutions = await masterDb.Institution.find({ status: 'active' });
+    // Cross-Database Search across all registered institutions
+    const institutions = await this.masterDb.Institution.find({ status: 'active' });
     for (const inst of institutions) {
       const tenant = await this.getTenantDB(inst.databaseName);
       if (!tenant) continue;
       const user = await tenant.User.findOne({
         $or: [{ username: query }, { email: query }],
       });
-      if (user && user.passwordHash && bcrypt.compareSync(password, user.passwordHash)) {
+      if (user && bcrypt.compareSync(password, user.passwordHash)) {
         const token = jwt.sign(
           {
             id: user._id.toString(),
@@ -1712,9 +1286,7 @@ class DatabaseManager {
           JWT_SECRET,
           { expiresIn: '7d' }
         );
-        const userObj = user.toObject ? user.toObject() : { ...user };
-        userObj.id = user._id ? user._id.toString() : userObj.id;
-        return { user: userObj, tenantDb: tenant, token, institutionName: inst.institutionName };
+        return { user: user.toObject(), tenantDb: tenant, token, institutionName: inst.institutionName };
       }
     }
 
@@ -1732,8 +1304,6 @@ class DatabaseManager {
     userAgent = 'CRM-Backend/1.0',
   }) {
     try {
-      await this.ensureConnected();
-      const masterDb = await this.getMasterDB();
       const logData = {
         databaseName,
         institutionName,
@@ -1746,8 +1316,8 @@ class DatabaseManager {
         timestamp: new Date(),
       };
 
-      if (masterDb?.MasterLog) {
-        await masterDb.MasterLog.create(logData);
+      if (this.masterDb?.MasterLog) {
+        await this.masterDb.MasterLog.create(logData);
       }
 
       if (databaseName && databaseName !== 'smart_crm_master') {

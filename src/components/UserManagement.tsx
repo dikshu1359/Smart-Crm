@@ -17,15 +17,18 @@ import {
   AlertCircle,
   Users,
   BookOpen,
+  UploadCloud,
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { TenantUser, SchoolClass } from '../types/crm';
+import { BulkUserImportModal } from './BulkUserImportModal';
 
 export const UserManagement: React.FC = () => {
-  const { activeTenant, users, classes, createUser, deleteUser } = useApp();
+  const { activeTenant, users, classes, createUser, deleteUser, refreshData } = useApp();
   if (!activeTenant) return null;
 
   const [showAddModal, setShowAddModal] = useState(false);
+  const [showBulkModal, setShowBulkModal] = useState(false);
   const [roleFilter, setRoleFilter] = useState<'all' | 'teacher' | 'student'>('all');
   const [searchQuery, setSearchQuery] = useState('');
 
@@ -194,13 +197,22 @@ export const UserManagement: React.FC = () => {
             Manage, provision, and issue login credentials for institutional faculty and students.
           </p>
         </div>
-        <button
-          onClick={handleOpenAddModal}
-          className="px-4 py-2.5 text-xs font-semibold text-white bg-gradient-to-r from-purple-600 to-pink-600 rounded-xl hover:opacity-95 transition-all shadow-md shadow-purple-600/30 flex items-center gap-2 cursor-pointer shrink-0 self-start sm:self-auto"
-        >
-          <UserPlus className="w-4 h-4" />
-          <span>+ Create User Account</span>
-        </button>
+        <div className="flex flex-wrap items-center gap-2.5 shrink-0 self-start sm:self-auto">
+          <button
+            onClick={() => setShowBulkModal(true)}
+            className="px-4 py-2.5 text-xs font-semibold text-purple-200 bg-white/[0.05] hover:bg-white/[0.1] border border-purple-500/30 hover:border-purple-500/60 rounded-xl transition-all flex items-center gap-2 cursor-pointer shadow-sm"
+          >
+            <UploadCloud className="w-4 h-4 text-purple-400" />
+            <span>Bulk Import Users</span>
+          </button>
+          <button
+            onClick={handleOpenAddModal}
+            className="px-4 py-2.5 text-xs font-semibold text-white bg-gradient-to-r from-purple-600 to-pink-600 rounded-xl hover:opacity-95 transition-all shadow-md shadow-purple-600/30 flex items-center gap-2 cursor-pointer"
+          >
+            <UserPlus className="w-4 h-4" />
+            <span>+ Create User Account</span>
+          </button>
+        </div>
       </div>
 
       {/* Filter and Search Bar */}
@@ -731,6 +743,17 @@ export const UserManagement: React.FC = () => {
           </div>
         </div>
       )}
+
+      {/* Bulk User Import Modal */}
+      <BulkUserImportModal
+        isOpen={showBulkModal}
+        onClose={() => setShowBulkModal(false)}
+        databaseName={activeTenant.databaseName}
+        institutionName={activeTenant.institutionName}
+        classes={classes}
+        existingUsers={users}
+        onImportComplete={refreshData}
+      />
     </div>
   );
 };

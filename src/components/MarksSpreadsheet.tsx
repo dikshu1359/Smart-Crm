@@ -27,6 +27,7 @@ export const MarksSpreadsheet: React.FC = () => {
     marks,
     fetchMarks,
     saveMarksBatch,
+    setActiveTab,
   } = useApp();
 
   if (!currentUser) return null;
@@ -34,6 +35,24 @@ export const MarksSpreadsheet: React.FC = () => {
   const isStudent = currentUser.role === 'student';
   const isTeacher = currentUser.role === 'teacher';
   const isAdmin = currentUser.role === 'admin';
+
+  if (isAdmin) {
+    return (
+      <div className="p-8 text-center rounded-2xl bg-white/[0.02] border border-white/10 max-w-xl mx-auto my-12">
+        <Award className="w-10 h-10 text-purple-400 mx-auto mb-3" />
+        <h2 className="text-base font-bold text-white font-display">Teacher Marks-Entry Workflow</h2>
+        <p className="text-xs text-slate-400 mt-2 leading-relaxed">
+          The Marks Spreadsheet is dedicated exclusively to assigned faculty for entering and updating cohort marks. Institutional administrators monitor academic performance, gradebooks, and trends via Performance Analytics.
+        </p>
+        <button
+          onClick={() => setActiveTab('analytics')}
+          className="mt-5 px-5 py-2.5 text-xs font-semibold text-white bg-purple-600 hover:bg-purple-500 rounded-xl transition-all cursor-pointer shadow-md shadow-purple-600/30"
+        >
+          Open Performance Analytics
+        </button>
+      </div>
+    );
+  }
 
   // Teacher/Admin authorized classes
   const authorizedClasses = useMemo(() => {

@@ -84,9 +84,9 @@ router.get('/', async (req, res) => {
 
 /**
  * POST /api/marks/batch
- * Teacher or Admin saves/updates spreadsheet marks in bulk
+ * Teacher saves/updates spreadsheet marks in bulk. Admin has read-only monitoring.
  */
-router.post('/batch', authorizeRoles('admin', 'teacher'), async (req, res) => {
+router.post('/batch', authorizeRoles('teacher'), async (req, res) => {
   try {
     const { classId, subject, assessmentTitle, maxMarks, records } = req.body;
 
@@ -252,9 +252,9 @@ router.get('/student-summary', async (req, res) => {
 
 /**
  * POST /api/marks/publish
- * Publish or unpublish assessment marks for a class
+ * Teacher publishes or unpublishes assessment marks for a class
  */
-router.post('/publish', authorizeRoles('admin', 'teacher'), async (req, res) => {
+router.post('/publish', authorizeRoles('teacher'), async (req, res) => {
   try {
     const { classId, subject, assessmentTitle, isPublished } = req.body;
     if (!classId) {

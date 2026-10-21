@@ -20,6 +20,7 @@ import {
   Table,
   FileSpreadsheet,
   CheckCircle2,
+  Sparkles,
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { DashboardTab, UserRole } from '../types/crm';
@@ -108,7 +109,13 @@ export const Navigation: React.FC<NavigationProps> = ({ mobileOpen, setMobileOpe
       id: 'marks',
       label: currentUser.role === 'student' ? 'My Marks & Gradebook' : 'Marks Spreadsheet',
       icon: Table,
-      roles: ['admin', 'teacher', 'student'],
+      roles: ['teacher', 'student'],
+    },
+    {
+      id: 'study-ai',
+      label: 'Study AI Assistant',
+      icon: Sparkles,
+      roles: ['teacher', 'student'],
     },
     {
       id: 'schedule',

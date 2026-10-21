@@ -1,0 +1,546 @@
+PROJECT: SMART INSTITUTIONAL CRM
+TASK: COMPLETE ROOT-CAUSE ANALYSIS, BUG FIXES, FEATURE IMPROVEMENTS, AND PRODUCTION DEPLOYMENT READINESS.
+
+You are a senior full-stack engineer, database architect, security engineer, and UI/UX specialist.
+
+I have an existing Smart Institutional CRM application built using React, TypeScript, Node.js/Express, MongoDB, and Vite. The project is connected to GitHub and deployed on Vercel.
+
+IMPORTANT:
+Do NOT rebuild the entire project from scratch.
+Inspect the existing source code, database models, API routes, authentication system, frontend components, deployment configuration, and environment variables before making changes.
+
+Preserve all working functionality and the existing visual identity. Make targeted, reliable changes to the actual root causes of the problems.
+
+My priority is a fully functional, production-ready application with real data, correct authentication, proper role-based dashboards, and smooth performance after deployment.
+
+==================================================
+1. FIX ADMIN LOGIN AND INCORRECT REDIRECTS
+==================================================
+
+Currently, Admin login sometimes redirects incorrectly or displays database-related errors.
+
+The application also displays a hardcoded/sample identity such as "Professor Rajesh Sharma" after login.
+
+This is unacceptable.
+
+Requirements:
+
+1. Inspect the complete admin authentication flow, including frontend login, backend API, database queries, token generation, and role-based redirects.
+2. Identify why the database error appears and why the incorrect identity is displayed.
+3. Fix the actual root cause.
+4. Never hardcode an administrator's name, username, institution, or profile into the dashboard.
+5. After successful login, load the authenticated administrator's actual profile from the correct database.
+6. Redirect the administrator to the Admin Dashboard only after authentication succeeds.
+7. On failed authentication, display an accurate error without exposing internal database information.
+8. Maintain sessions securely and handle expired or invalid tokens correctly.
+9. Ensure refresh, logout, and subsequent login work properly.
+10. Verify that production login works against the production database.
+
+Do not invent new credentials or silently reset existing accounts.
+
+If the application uses predefined development credentials, inspect their implementation and migrate to a secure, explicitly configured production administrator account. Never assume that development credentials automatically exist in MongoDB Atlas.
+
+==================================================
+2. REMOVE ALL SAMPLE, DUMMY, AND HARDCODED DATA
+==================================================
+
+I DO NOT WANT SAMPLE DATA ANYWHERE IN THE APPLICATION.
+
+Remove hardcoded sample records, demo profiles, fabricated students, sample teachers, sample marks, fake attendance records, mock notifications, and fallback identities from production functionality.
+
+Requirements:
+
+1. All dashboards must display records retrieved from the authenticated user's authorized database.
+2. Empty databases must produce clean empty states, such as "No students found" or "No records available".
+3. Never generate fake records to make a dashboard look populated.
+4. Never silently substitute mock data when an API or database request fails.
+5. Display a proper loading state while fetching records.
+6. Display a clear retryable error when fetching fails.
+7. Keep any test fixtures strictly separate from production data and disable them in production.
+8. Do not create fake institutional names, administrator identities, teacher accounts, or student accounts automatically.
+9. Ensure analytics are calculated from real database records only.
+
+When no data exists, show an appropriate empty dashboard instead of invented information.
+
+==================================================
+3. FIX MONGODB AND PRODUCTION DATABASE CONFIGURATION
+==================================================
+
+Inspect the existing MongoDB integration and fix all database connection and persistence issues.
+
+Requirements:
+
+1. Verify the MongoDB connection using the actual environment variable names referenced by the source code.
+2. Confirm that the production application connects to the intended MongoDB Atlas database.
+3. Ensure serverless functions reuse database connections appropriately.
+4. Avoid creating unnecessary database connections for every request.
+5. Add safe connection error handling and useful server-side diagnostic logs.
+6. Ensure all create, read, update, and delete operations persist correctly.
+7. Verify that the same authorized production database is used consistently across account creation and authentication.
+8. Ensure tenant-specific records cannot be accessed by another institution.
+9. Do not create a new database or silently switch databases without authorization.
+10. Never log passwords, MongoDB connection strings, JWT secrets, API keys, or other credentials.
+
+If configuration is missing, ask me to configure the required environment variables securely.
+
+Do not ask me to paste secret credentials directly into this chat.
+
+==================================================
+4. ADMIN-CREATED TEACHER AND STUDENT ACCOUNTS
+==================================================
+
+This is one of the most important requirements.
+
+The Admin must be able to create teacher and student accounts. The credentials issued by the Admin must actually work when those users sign in.
+
+Currently, teacher/student login can return "Invalid Credentials" after deployment.
+
+Investigate and fix the underlying cause.
+
+Requirements:
+
+A. Account creation
+
+1. Admin can create teacher and student accounts individually.
+2. Admin can import multiple users through supported files.
+3. Each account must have a unique login identifier within the appropriate institution and authentication rules.
+4. The system must save the correct user ID, email, role, institution ID, and other required details.
+5. Passwords must be securely hashed on the backend.
+6. Never store or display plaintext passwords in database records or application logs.
+7. Ensure account creation and login use the same identifier-normalization rules and password-verification mechanism.
+8. Validate duplicate email addresses, user IDs, roll numbers, and other institution-specific identifiers.
+9. Display useful validation errors when an account cannot be created.
+10. Never report successful account creation if the database write failed.
+
+B. Credential assignment interface
+
+Within Admin > Create Users, provide an organized account-creation and bulk-import interface.
+
+For individual account creation, provide the necessary fields for:
+- Full name
+- Email or login ID
+- Student roll number, where applicable
+- Teacher ID, where applicable
+- Role
+- Class and division, where applicable
+- Initial password or secure temporary credential generation
+
+For bulk imports, show a clear table with columns such as:
+
+| Full Name | Roll Number / Teacher ID | Email | Username / Login ID | Initial Credential | Status | Actions |
+
+The exact fields must depend on whether the record represents a teacher or a student.
+
+Allow the Admin to review and edit the proposed login IDs and emails before creating accounts.
+
+For initial credentials:
+- Prefer securely generated temporary passwords or a secure invitation/reset-password flow.
+- Never use a universal weak password for all accounts.
+- Require users with temporary passwords to change their password on first login.
+- If an existing password-reset flow is available, reuse and improve it instead of creating an incompatible second system.
+- Do not display permanent plaintext passwords after account creation.
+
+C. Authentication and redirection
+
+After account creation:
+
+1. A teacher must be able to sign in using the exact credentials issued through the Admin workflow.
+2. A student must be able to sign in using the exact credentials issued through the Admin workflow.
+3. Teachers must redirect to the Teacher Dashboard.
+4. Students must redirect to the Student Dashboard.
+5. Admins must redirect to the Admin Dashboard.
+6. Role selection on the login screen must not override the authenticated role returned by the backend.
+7. Prevent users from accessing dashboards or API resources belonging to other roles.
+8. Verify all these flows against the deployed production application.
+
+Do not claim this feature is fixed unless the actual account creation and login code paths have been inspected and tested.
+
+==================================================
+5. BULK IMPORT STUDENTS AND TEACHERS
+==================================================
+
+Under Admin > Create Users, provide a working bulk-import workflow supporting:
+
+- PDF
+- Microsoft Word documents, including DOCX
+- Excel spreadsheets, including XLSX
+- CSV files
+
+Requirements:
+
+1. Accept only supported file types and validate file sizes.
+2. Extract available names, roll numbers, teacher IDs, email addresses, class details, and other relevant fields.
+3. For scanned PDFs or images embedded in documents, determine whether OCR is needed. If OCR is not configured, explain the limitation rather than pretending extraction succeeded.
+4. Display a preview table before saving.
+5. Show the total number of detected records.
+6. Allow the Admin to edit individual rows.
+7. Allow the Admin to remove individual rows from the pending import.
+8. Allow the Admin to add missing records manually.
+9. Allow column mapping when uploaded documents use different headings.
+10. Validate required fields and duplicates before saving.
+11. Show clear row-level validation errors.
+12. Let the Admin confirm the final import.
+13. Save only validated and confirmed records.
+14. Display an import summary containing successful records, rejected records, and reasons for rejection.
+15. Prevent duplicate submissions from creating duplicate accounts.
+16. Use database transactions or an appropriate safe batch strategy where supported.
+17. Never delete existing database records when a row is removed from an import preview.
+18. Never create sample records to fill missing information.
+19. Generate or assign login identifiers using explicit, editable, deterministic rules.
+20. Provide secure initial credentials or invitations for imported users.
+
+If any field is missing, allow the Admin to correct it before final import.
+
+==================================================
+6. CORRECT ADMIN AND TEACHER RESPONSIBILITIES
+==================================================
+
+ADMIN DASHBOARD:
+
+The Admin is responsible for institutional administration and monitoring.
+
+Admin must be able to:
+- Manage the institution's profile and authorized institutional settings.
+- Create and manage student and teacher accounts.
+- Import student and teacher records.
+- Manage classes, divisions, subjects, and teacher allocations where supported.
+- Monitor student academic performance.
+- View teacher-submitted marks and student progress.
+- View attendance summaries and institutional analytics.
+- Monitor authorized institutional activities.
+
+Admin must NOT have the Teacher's marks-entry spreadsheet or grade-entry interface.
+
+Remove marks-entry and marks-spreadsheet editing functionality from the Admin Dashboard.
+
+The Admin can view authorized marks, grades, reports, and performance analytics but must not edit or enter students' marks through the teacher-only marks-entry workflow.
+
+TEACHER DASHBOARD:
+
+Teachers must be able to:
+- View their assigned classes and subjects.
+- View their assigned student rosters.
+- Mark attendance for authorized classes.
+- Enter and update academic marks for authorized students.
+- Use the marks spreadsheet and gradebook.
+- Manage assignments and assessments where supported.
+- Review student performance in their assigned classes.
+- Access the Study AI feature described below.
+
+STUDENT DASHBOARD:
+
+Students must be able to:
+- View their own profile.
+- View their own attendance and attendance percentage.
+- View their own marks, grades, and academic progress.
+- Access their assigned subjects, assignments, notices, and schedules.
+- Access the Study AI feature described below.
+
+Students must not be able to change attendance or marks.
+
+BACKEND ENFORCEMENT:
+
+Implement permissions in backend middleware and API handlers, not just by hiding frontend buttons.
+
+Verify that unauthorized API requests are rejected appropriately.
+
+==================================================
+7. STUDY AI — AI LEARNING ASSISTANT
+==================================================
+
+Add a dedicated feature called "Study AI" to ONLY these dashboards:
+- Teacher Dashboard
+- Student Dashboard
+
+Do NOT add Study AI to the Admin Dashboard.
+
+Study AI should provide a modern conversational learning assistant inspired by the usability of ChatGPT and Gemini. Do not copy their branding or imply that this application is affiliated with them.
+
+The feature should provide:
+
+A. Chat interface
+- Modern conversational interface.
+- Message history during the conversation.
+- User and assistant message bubbles.
+- Clear loading and error states.
+- A stop-generation option if supported.
+- Copy-answer functionality.
+- A clear new-chat action.
+- Responsive design for desktop and mobile.
+- Smooth scrolling and accessible controls.
+
+B. Academic assistance
+
+Users should be able to ask questions about:
+- Programming
+- Mathematics
+- Computer engineering
+- Science
+- Other academic subjects
+- Exam preparation
+- Assignments and concepts
+- Revision and study planning
+
+The assistant should generate:
+- Relevant explanations
+- Structured study notes
+- Important definitions
+- Step-by-step solutions where appropriate
+- Examples
+- Practice questions
+- Revision summaries
+- Topic-wise notes
+
+Answers must respond to the actual question rather than returning generic or unrelated text.
+
+C. File uploads
+
+Provide a working attachment interface supporting appropriate file types such as:
+- PDF documents
+- DOCX documents
+- TXT files
+- Images
+
+The assistant should be able to analyze supported uploaded content and answer questions about it.
+
+Requirements:
+- Validate file types and sizes.
+- Extract text from supported documents.
+- Use OCR for image-based content only if properly configured.
+- Explain clearly when a file cannot be processed.
+- Never claim to have analyzed a file if extraction failed.
+- Store uploaded files securely if persistent storage is required.
+- Prevent unauthorized users from accessing another user's uploads.
+
+D. Real AI integration
+
+Do not implement Study AI as a collection of hardcoded answers, random responses, fake loading animations, or predefined notes.
+
+Inspect the existing Gemini API integration and reuse it if suitable.
+
+If a working Gemini API integration exists:
+- Verify the actual server-side request flow.
+- Fix the integration and error handling.
+- Reuse the existing secure configuration where appropriate.
+
+If a required API key is missing or the existing integration is insufficient:
+- Ask me to provide/configure the required API key securely.
+- Tell me the exact environment variable name expected by the code.
+- Never hardcode the API key in frontend code.
+- Never expose it in GitHub or browser responses.
+- Do not pretend the AI feature works without a functioning model connection.
+
+E. Study AI security and reliability
+
+- Make AI requests through a secure backend endpoint.
+- Authenticate all requests.
+- Apply appropriate request limits.
+- Handle rate limits, timeouts, unavailable models, and invalid responses.
+- Do not expose internal prompts, API credentials, or stack traces.
+- Clearly distinguish AI-generated guidance from verified institutional records.
+- Do not invent marks, attendance, or official academic data.
+- When answering questions about institutional records, use only records the authenticated user is authorized to access.
+
+F. UI integration
+
+Add Study AI to the Teacher and Student dashboards with a consistent visual design.
+
+Preserve the existing project theme and navigation.
+
+Ensure that Study AI does not break other dashboard functionality.
+
+==================================================
+8. REAL DATA AND INSTITUTIONAL ISOLATION
+==================================================
+
+This is a multi-tenant institutional CRM.
+
+Requirements:
+
+1. Every authenticated user must be associated with the correct institution.
+2. Admin-created accounts must belong to the intended institution.
+3. Student and teacher queries must be scoped to their authorized institution.
+4. Students can access only their own personal academic records unless an explicitly authorized feature allows otherwise.
+5. Teachers can access only their assigned classes, subjects, and students.
+6. Admins can monitor only their own institution's records.
+7. Never trust an institution ID supplied by the frontend without server-side authorization.
+8. Verify tenant access in every sensitive API route.
+9. Prevent cross-institution data leakage.
+10. Ensure account creation, login, assignments, marks, attendance, and analytics use consistent tenant identifiers.
+
+Do not change the current multi-tenant architecture without analyzing the existing implementation and explaining why a change is necessary.
+
+==================================================
+9. VERCEL DEPLOYMENT AND PRODUCTION READINESS
+==================================================
+
+The application must work correctly after deployment, not only in local development or Google AI Studio preview.
+
+Inspect the real deployment configuration, including:
+- package.json
+- package-lock.json
+- vite.config.ts
+- vercel.json
+- Existing server.ts
+- Existing API routes
+- Existing serverless function entry points
+- MongoDB connection utilities
+- Authentication middleware
+- Environment variable references
+- Frontend API URL configuration
+
+Requirements:
+
+1. Fix all reproducible build errors and dependency conflicts.
+2. Ensure npm install succeeds without --force or --legacy-peer-deps unless there is a separately justified and documented necessity.
+3. Ensure npm run build succeeds.
+4. Verify that Vercel API routes correctly invoke the intended backend handlers.
+5. Ensure the frontend does not incorrectly send production requests to localhost.
+6. Ensure environment variables are read from secure server-side configuration.
+7. Never commit real .env files or credentials.
+8. Check that production and preview environments have the required configuration.
+9. Confirm that database operations work through the deployed backend.
+10. Confirm that admin, teacher, and student login work after deployment.
+11. Verify account creation and authentication using the same production database.
+12. Fix incorrect redirects, API failures, and runtime errors.
+13. Review Vite WebSocket/HMR errors and distinguish development-only problems from actual production errors.
+14. If persistent WebSockets or other long-running server processes are required, identify the appropriate backend hosting architecture instead of pretending Vercel serverless functions support every persistent connection.
+15. Preserve the existing production domain and deployment setup unless a change is required.
+16. Do not remove functionality just to make the deployment succeed.
+
+Identify any external backend or service that must be deployed separately.
+
+Provide the exact environment variable names required by the actual source code. Do not invent names.
+
+==================================================
+10. PROFESSIONAL APPLICATION EXPERIENCE
+==================================================
+
+The application should feel reliable and polished, like a modern production web application.
+
+Improve usability without unnecessarily redesigning the entire existing project.
+
+Requirements:
+- Smooth page navigation.
+- Correct authentication redirects.
+- Responsive dashboards.
+- Consistent typography, spacing, and components.
+- Clear form validation.
+- Proper loading indicators.
+- Helpful empty states.
+- Useful error messages.
+- Accessible buttons and form controls.
+- No broken links or nonfunctional buttons.
+- No infinite loading spinners.
+- No fake data presented as real data.
+- No unexpected dashboard identity changes.
+- No unnecessary page reloads.
+- Correct session handling.
+- Appropriate error boundaries.
+- Clear success and failure notifications.
+- Efficient API calls and database queries.
+
+Maintain the existing Smart Institutional CRM branding and visual theme.
+
+Do not make unnecessary visual changes while fixing authentication or backend problems.
+
+==================================================
+11. PROFILE, MARKS, ATTENDANCE, AND EXISTING FEATURES
+==================================================
+
+Inspect all existing features and fix reproducible errors without removing working functionality.
+
+Preserve:
+- Admin, Teacher, and Student dashboards.
+- Profile management.
+- PDF import and export.
+- Attendance management.
+- Teacher-only marks spreadsheet and gradebook.
+- Student performance analytics.
+- Assignments and assessments.
+- Notices and messaging.
+- Timetable and calendar.
+- Institutional and tenant data management.
+- Existing authentication and authorization.
+- Existing working integrations.
+
+Ensure that:
+- Profile information is loaded from actual authenticated user records.
+- Attendance is saved to the correct database.
+- Marks are saved to the correct student and institution.
+- Admin can monitor performance but cannot enter marks through the teacher-only spreadsheet.
+- Teachers can enter marks only for authorized students and subjects.
+- Students can view only their own permitted records.
+
+Do not claim that an existing feature has been tested unless the relevant test actually ran.
+
+==================================================
+12. TESTING AND ROOT-CAUSE VERIFICATION
+==================================================
+
+Before declaring the work complete:
+
+1. Inspect the existing source code and identify the actual causes of each reported issue.
+2. Make targeted changes to the relevant files.
+3. Run the available tests.
+4. Run npm install.
+5. Run npm run build.
+6. Verify API routes and database connection handling.
+7. Test authentication logic for all three roles.
+8. Test role-based redirects.
+9. Test account creation and subsequent login.
+10. Test bulk-import validation and persistence.
+11. Test teacher-only marks-entry permissions.
+12. Test Study AI using the configured model integration, if credentials are available.
+13. Test file uploads and extraction for supported file types.
+14. Test tenant isolation and unauthorized access.
+15. Verify that production does not use hardcoded sample data.
+16. Inspect logs for remaining reproducible errors.
+
+Separate verified test results from tests that could not be run because credentials, external services, or deployment access were unavailable.
+
+Do not report all tests as passed if they were not executed.
+
+==================================================
+13. HOW TO HANDLE MISSING INFORMATION
+==================================================
+
+If you need any API key, database configuration, external service URL, or permission:
+
+1. Explain exactly why it is needed.
+2. Tell me the exact environment variable name expected by the source code.
+3. Tell me where to configure it securely.
+4. Ask me only for the genuinely missing information.
+5. Never ask me to paste secret credentials into the chat.
+6. Never invent credentials, URLs, database records, or API responses.
+
+If a task cannot be completed within the current environment, clearly explain what remains and give me the exact next steps.
+
+==================================================
+14. FINAL RESPONSE REQUIRED
+==================================================
+
+After completing the work, provide:
+
+A. Root causes identified.
+B. Files changed and why.
+C. Features fixed or implemented.
+D. Actual test results.
+E. Required environment variables, based on the source code.
+F. Any external API keys or services still needed.
+G. Exact steps to push the verified changes to my existing GitHub repository.
+H. Exact steps to redeploy the correct commit on Vercel.
+I. A final checklist to verify Admin, Teacher, Student, bulk import, Study AI, and database persistence in production.
+
+IMPORTANT FINAL RULES:
+
+- Do not rebuild the project from scratch.
+- Do not introduce sample or fake institutional data.
+- Do not hardcode user identities or credentials.
+- Do not break existing features.
+- Do not expose secrets.
+- Do not blindly change database architecture.
+- Do not disable security checks to make login work.
+- Do not claim successful production deployment without actual verification.
+- Fix root causes, not merely visible symptoms.
+- Prioritize data integrity, security, correct authentication, and real production behavior.
