@@ -153,6 +153,25 @@ export const api = {
     return safeJson(res, { success: false, message: 'Batch user creation request failed.' });
   },
 
+  async resetUserPassword(
+    databaseName: string,
+    userId: string,
+    payload: { newPassword?: string; requirePasswordChange?: boolean }
+  ): Promise<{
+    success: boolean;
+    message?: string;
+    temporaryPassword?: string;
+    user?: any;
+    error?: string;
+  }> {
+    const res = await fetch(`${BASE_URL}/users/${userId}/reset-password`, {
+      method: 'POST',
+      headers: getAuthHeaders(databaseName),
+      body: JSON.stringify(payload),
+    });
+    return safeJson(res, { success: false, message: 'Password reset request failed.' });
+  },
+
   // Study AI
   async askStudyAI(
     databaseName: string,
@@ -200,6 +219,25 @@ export const api = {
       body: JSON.stringify({ studentId }),
     });
     return res.json();
+  },
+
+  async bulkAllotStudents(
+    databaseName: string,
+    classId: string,
+    studentIds: string[]
+  ): Promise<{
+    success: boolean;
+    message?: string;
+    allottedCount?: number;
+    class?: any;
+    error?: string;
+  }> {
+    const res = await fetch(`${BASE_URL}/classes/${classId}/bulk-allot`, {
+      method: 'POST',
+      headers: getAuthHeaders(databaseName),
+      body: JSON.stringify({ studentIds }),
+    });
+    return safeJson(res, { success: false, message: 'Bulk class allotment request failed.' });
   },
 
   async deleteClass(databaseName: string, classId: string) {

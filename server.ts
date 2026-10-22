@@ -35,15 +35,10 @@ async function startServer() {
       next();
     });
 
-    const isCloudEnv = Boolean(process.env.K_SERVICE || process.env.AIS_APPLET_ID);
-
     const vite = await createViteServer({
       server: {
         middlewareMode: true,
-        hmr: {
-          server: httpServer,
-          clientPort: isCloudEnv ? 443 : undefined,
-        },
+        hmr: false,
       },
       appType: 'spa',
     });

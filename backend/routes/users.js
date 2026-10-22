@@ -381,6 +381,61 @@ router.post('/batch', authorizeRoles('admin'), async (req, res) => {
 });
 
 /**
+ * POST /api/users/:id/reset-password
+ * Administrator resets password for a teacher or student account
+ */
+router.post('/:id/reset-password', authorizeRoles('admin'), async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { newPassword, requirePasswordChange } = req.body;
+
+    const user = await req.tenantDb.User.findById(id);
+    if (!user) {
+      return res.status(404).json({ error: 'UserNotFound', message: 'User account not found.' });
+    }
+
+    let passwordToSet = (newPassword || '').trim();
+    if (!passwordToSet) {
+      // Auto-generate secure temporary password
+      const prefix = user.role === 'teacher' ? 'Faculty' : 'Student';
+      passwordToSet = `${prefix}#${Math.floor(1000 + Math.random() * 9000)}`;
+    } else if (passwordToSet.length < 6) {
+      return res.status(400).json({ error: 'WeakPassword', message: 'Password must be at least 6 characters.' });
+    }
+
+    const passwordHash = bcrypt.hashSync(passwordToSet, 10);
+    user.passwordHash = passwordHash;
+    user.mustChangePassword = requirePasswordChange !== false;
+    await user.save();
+
+    await dbManager.logActivity({
+      databaseName: req.databaseName,
+      institutionName: req.user?.institutionName || '',
+      actorName: req.user?.fullName || 'Admin',
+      actorRole: 'admin',
+      actionCategory: 'USER_MGMT',
+      description: `Reset login credentials for ${user.role} account ${user.fullName} (${user.username})`,
+    });
+
+    res.json({
+      success: true,
+      message: `Password reset successfully for ${user.fullName}.`,
+      temporaryPassword: passwordToSet,
+      user: {
+        id: user._id ? user._id.toString() : user.id,
+        username: user.username,
+        fullName: user.fullName,
+        email: user.email,
+        role: user.role,
+        mustChangePassword: user.mustChangePassword,
+      },
+    });
+  } catch (err) {
+    res.status(500).json({ error: 'ResetPasswordError', message: err.message });
+  }
+});
+
+/**
  * PUT /api/users/:id
  * Update user details & extended profile attributes
  */

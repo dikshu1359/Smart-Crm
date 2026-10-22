@@ -77,9 +77,17 @@ interface AppContextValue {
     userPayload: any
   ) => Promise<{ ok: boolean; message?: string; initialPassword?: string; user?: any }>;
   updateUser: (userId: string, updates: any) => Promise<{ ok: boolean; message?: string }>;
+  resetUserPassword: (
+    userId: string,
+    payload: { newPassword?: string; requirePasswordChange?: boolean }
+  ) => Promise<{ ok: boolean; message?: string; temporaryPassword?: string }>;
   deleteUser: (userId: string) => Promise<{ ok: boolean; message?: string }>;
   createClass: (classPayload: any) => Promise<{ ok: boolean; message?: string }>;
   allotStudent: (classId: string, studentId: string) => Promise<{ ok: boolean; message?: string }>;
+  bulkAllotStudents: (
+    classId: string,
+    studentIds: string[]
+  ) => Promise<{ ok: boolean; message?: string; allottedCount?: number }>;
   deleteClass: (classId: string) => Promise<{ ok: boolean; message?: string }>;
   createAssignment: (payload: any) => Promise<{ ok: boolean; message?: string; assignment?: any }>;
   updateAssignment: (assignmentId: string, payload: any) => Promise<{ ok: boolean; message?: string; assignment?: any }>;
@@ -406,6 +414,21 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   };
 
+  const resetUserPassword = async (
+    userId: string,
+    payload: { newPassword?: string; requirePasswordChange?: boolean }
+  ) => {
+    if (!activeTenant) return { ok: false, message: 'No active institution.' };
+    try {
+      const res = await api.resetUserPassword(activeTenant.databaseName, userId, payload);
+      if (!res.success) return { ok: false, message: res.message || 'Failed to reset password.' };
+      await refreshData();
+      return { ok: true, message: res.message, temporaryPassword: res.temporaryPassword };
+    } catch (err: any) {
+      return { ok: false, message: err.message };
+    }
+  };
+
   const deleteUser = async (userId: string) => {
     if (!activeTenant) return { ok: false, message: 'No active institution.' };
     try {
@@ -437,6 +460,18 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       if (!res.success) return { ok: false, message: res.message || 'Failed to allot student.' };
       await refreshData();
       return { ok: true };
+    } catch (err: any) {
+      return { ok: false, message: err.message };
+    }
+  };
+
+  const bulkAllotStudents = async (classId: string, studentIds: string[]) => {
+    if (!activeTenant) return { ok: false, message: 'No active institution.' };
+    try {
+      const res = await api.bulkAllotStudents(activeTenant.databaseName, classId, studentIds);
+      if (!res.success) return { ok: false, message: res.message || 'Failed to bulk allot students.' };
+      await refreshData();
+      return { ok: true, message: res.message, allottedCount: res.allottedCount };
     } catch (err: any) {
       return { ok: false, message: err.message };
     }
@@ -803,9 +838,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         refreshData,
         createUser,
         updateUser,
+        resetUserPassword,
         deleteUser,
         createClass,
         allotStudent,
+        bulkAllotStudents,
         deleteClass,
         createAssignment,
         updateAssignment,

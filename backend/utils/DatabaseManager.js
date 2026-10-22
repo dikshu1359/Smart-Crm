@@ -461,7 +461,9 @@ function seedDemoData(masterDb, tenantDatabases) {
   const vcet = createTenantModels(vcetDbName);
   tenantDatabases.set(vcetDbName, vcet);
 
-  const hashAdmin = bcrypt.hashSync('admin123', 10);
+  const configuredAdminPass = process.env.ADMIN_PASSWORD || 'admin123';
+  const configuredAdminEmail = (process.env.ADMIN_IDENTIFIER || 'admin@smartcrm.local').toLowerCase().trim();
+  const hashAdmin = bcrypt.hashSync(configuredAdminPass, 10);
   const hashTeacher = bcrypt.hashSync('teacher123', 10);
   const hashStudent = bcrypt.hashSync('student123', 10);
 
@@ -479,8 +481,8 @@ function seedDemoData(masterDb, tenantDatabases) {
     _id: adminId,
     username: 'vcetadmin',
     passwordHash: hashAdmin,
-    fullName: 'Prof. Rajesh Sharma',
-    email: 'admin@vcet.edu',
+    fullName: 'Institutional Administrator',
+    email: configuredAdminEmail,
     role: 'admin',
     databaseName: vcetDbName,
     status: 'active',
@@ -1053,10 +1055,11 @@ class DatabaseManager {
 
   async ensurePrimaryAdminAccount() {
     const institutionName = process.env.PRIMARY_INSTITUTION_NAME || 'Vidyavardhini College of Engineering and Technology';
-    const adminUsername = (process.env.ADMIN_USERNAME || 'vcetadmin').toLowerCase().trim();
-    const adminEmail = (process.env.ADMIN_EMAIL || 'admin@vcet.edu').toLowerCase().trim();
+    const rawIdentifier = (process.env.ADMIN_IDENTIFIER || process.env.ADMIN_USERNAME || 'admin@smartcrm.local').toLowerCase().trim();
+    const adminEmail = (process.env.ADMIN_EMAIL || (rawIdentifier.includes('@') ? rawIdentifier : 'admin@smartcrm.local')).toLowerCase().trim();
+    const adminUsername = rawIdentifier.includes('@') ? rawIdentifier.split('@')[0] : rawIdentifier;
     const adminName = process.env.ADMIN_FULL_NAME || 'VCET Administrator';
-    const adminPassword = process.env.ADMIN_PASSWORD || 'Admin@VCET2026';
+    const adminPassword = process.env.ADMIN_PASSWORD || 'admin123';
     const campusCode = process.env.CAMPUS_CODE || 'VCET-WEST';
     const databaseName = 'smart_crm_vcetadmin_1792247322612';
 
@@ -1080,11 +1083,17 @@ class DatabaseManager {
 
       const tenantDb = await this.getTenantDB(databaseName);
       let existingUser = await tenantDb.User.findOne({
-        $or: [{ username: adminUsername }, { email: adminEmail }],
+        $or: [
+          { username: adminUsername },
+          { email: adminEmail },
+          { email: 'admin@smartcrm.local' },
+          { username: 'vcetadmin' }
+        ],
       });
 
+      const passwordHash = bcrypt.hashSync(adminPassword, 10);
+
       if (!existingUser) {
-        const passwordHash = bcrypt.hashSync(adminPassword, 10);
         existingUser = await tenantDb.User.create({
           username: adminUsername,
           passwordHash,
@@ -1095,6 +1104,13 @@ class DatabaseManager {
           status: 'active',
           createdAt: new Date(),
         });
+      } else {
+        // Ensure credentials match configured ADMIN_PASSWORD and email alias admin@smartcrm.local
+        existingUser.passwordHash = passwordHash;
+        if (!existingUser.email || existingUser.email === 'admin@vcet.edu') {
+          existingUser.email = adminEmail;
+        }
+        await existingUser.save();
       }
     } catch (err) {
       console.warn('[DatabaseManager] Notice on primary administrator check:', err.message);
@@ -1226,6 +1242,24 @@ class DatabaseManager {
     const query = (usernameOrEmail || '').trim().toLowerCase();
     if (!query) return null;
 
+    const configuredAdminIdentifier = (process.env.ADMIN_IDENTIFIER || 'admin@smartcrm.local').toLowerCase().trim();
+    const isPredefinedAdminQuery =
+      query === 'admin@smartcrm.local' || query === configuredAdminIdentifier || query === 'admin';
+
+    const buildUserQuery = () => {
+      if (isPredefinedAdminQuery) {
+        return {
+          $or: [
+            { username: query },
+            { email: query },
+            { email: 'admin@smartcrm.local' },
+            { role: 'admin' },
+          ],
+        };
+      }
+      return { $or: [{ username: query }, { email: query }] };
+    };
+
     // Direct search in requested tenant or institution if specified
     if (requestedDatabaseName) {
       let targetDbName = requestedDatabaseName;
@@ -1241,9 +1275,7 @@ class DatabaseManager {
 
       const tenant = await this.getTenantDB(targetDbName);
       if (tenant) {
-        const user = await tenant.User.findOne({
-          $or: [{ username: query }, { email: query }],
-        });
+        const user = await tenant.User.findOne(buildUserQuery());
         if (user && bcrypt.compareSync(password, user.passwordHash)) {
           const inst = matchedInst || (await this.masterDb.Institution.findOne({ databaseName: targetDbName }));
           const token = jwt.sign(
@@ -1269,9 +1301,7 @@ class DatabaseManager {
     for (const inst of institutions) {
       const tenant = await this.getTenantDB(inst.databaseName);
       if (!tenant) continue;
-      const user = await tenant.User.findOne({
-        $or: [{ username: query }, { email: query }],
-      });
+      const user = await tenant.User.findOne(buildUserQuery());
       if (user && bcrypt.compareSync(password, user.passwordHash)) {
         const token = jwt.sign(
           {

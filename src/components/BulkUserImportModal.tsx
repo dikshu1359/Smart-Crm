@@ -64,11 +64,13 @@ export const BulkUserImportModal: React.FC<BulkUserImportModalProps> = ({
     rollNumber: string;
     email: string;
     username: string;
+    password: string;
   }>({
     fullName: '',
     rollNumber: '',
     email: '',
     username: '',
+    password: '',
   });
 
   const [previewRows, setPreviewRows] = useState<BulkImportRow[]>([]);
@@ -189,6 +191,7 @@ export const BulkUserImportModal: React.FC<BulkUserImportModalProps> = ({
           rollNumber: headers.find((h) => /roll|id|emp|reg|code/i.test(h)) || '',
           email: headers.find((h) => /mail|email/i.test(h)) || '',
           username: headers.find((h) => /user|login/i.test(h)) || '',
+          password: headers.find((h) => /pass|pwd|credential/i.test(h)) || '',
         };
 
         setColumnMap(autoMap);
@@ -270,7 +273,9 @@ export const BulkUserImportModal: React.FC<BulkUserImportModalProps> = ({
       const username = columnMap.username && item[columnMap.username]
         ? String(item[columnMap.username] || '').trim().toLowerCase()
         : generateDeterministicUsername(name, roll, idx, targetRole);
-      const password = generateDeterministicPassword(targetRole, idx);
+      const password = columnMap.password && item[columnMap.password]
+        ? String(item[columnMap.password] || '').trim()
+        : generateDeterministicPassword(targetRole, idx);
 
       return {
         id: `row-${idx}-${Date.now()}`,
@@ -587,6 +592,24 @@ export const BulkUserImportModal: React.FC<BulkUserImportModalProps> = ({
                     className="w-full bg-black/40 border border-white/10 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-purple-500"
                   >
                     <option value="">Auto-generate login username</option>
+                    {rawHeaders.map((h) => (
+                      <option key={h} value={h}>
+                        {h}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-300 mb-1">
+                    Initial Password / Credential Column (Optional)
+                  </label>
+                  <select
+                    value={columnMap.password}
+                    onChange={(e) => setColumnMap({ ...columnMap, password: e.target.value })}
+                    className="w-full bg-black/40 border border-white/10 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-purple-500"
+                  >
+                    <option value="">Auto-generate secure temporary password</option>
                     {rawHeaders.map((h) => (
                       <option key={h} value={h}>
                         {h}

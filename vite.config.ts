@@ -17,9 +17,7 @@ export default defineConfig(() => {
       port: 3000,
       host: '0.0.0.0',
       allowedHosts: true as const,
-      hmr: {
-        clientPort: isCloudEnv ? 443 : 3000,
-      },
+      hmr: false,
     },
   };
 });

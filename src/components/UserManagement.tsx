@@ -24,13 +24,21 @@ import { TenantUser, SchoolClass } from '../types/crm';
 import { BulkUserImportModal } from './BulkUserImportModal';
 
 export const UserManagement: React.FC = () => {
-  const { activeTenant, users, classes, createUser, deleteUser, refreshData } = useApp();
+  const { activeTenant, users, classes, createUser, deleteUser, refreshData, resetUserPassword } = useApp();
   if (!activeTenant) return null;
 
   const [showAddModal, setShowAddModal] = useState(false);
   const [showBulkModal, setShowBulkModal] = useState(false);
   const [roleFilter, setRoleFilter] = useState<'all' | 'teacher' | 'student'>('all');
   const [searchQuery, setSearchQuery] = useState('');
+
+  // Password reset modal states
+  const [resetTargetUser, setResetTargetUser] = useState<TenantUser | null>(null);
+  const [newResetPassword, setNewResetPassword] = useState('');
+  const [requirePasswordChange, setRequirePasswordChange] = useState(true);
+  const [resetLoading, setResetLoading] = useState(false);
+  const [resetError, setResetError] = useState('');
+  const [showResetPasswordInput, setShowResetPasswordInput] = useState(false);
 
   // Form states
   const [fullName, setFullName] = useState('');
@@ -67,6 +75,47 @@ export const UserManagement: React.FC = () => {
     const randomNum = Math.floor(1000 + Math.random() * 9000);
     const prefix = targetRole === 'teacher' ? 'Faculty' : 'Student';
     return `${prefix}#${randomNum}`;
+  };
+
+  const handleOpenResetModal = (target: TenantUser) => {
+    setResetTargetUser(target);
+    setNewResetPassword(generateRandomPassword(target.role));
+    setRequirePasswordChange(true);
+    setResetError('');
+    setShowResetPasswordInput(false);
+  };
+
+  const handleConfirmResetPassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!resetTargetUser) return;
+    setResetError('');
+    if (newResetPassword && newResetPassword.trim().length < 6) {
+      setResetError('Password must be at least 6 characters long.');
+      return;
+    }
+
+    setResetLoading(true);
+    const userId = resetTargetUser.id || (resetTargetUser as any)._id;
+    const res = await resetUserPassword(userId, {
+      newPassword: newResetPassword.trim(),
+      requirePasswordChange,
+    });
+    setResetLoading(false);
+
+    if (!res.ok) {
+      setResetError(res.message || 'Failed to reset password.');
+      return;
+    }
+
+    // Success: reveal credentials to Admin
+    setCreatedCredentials({
+      fullName: resetTargetUser.fullName,
+      username: resetTargetUser.username,
+      email: resetTargetUser.email,
+      role: resetTargetUser.role,
+      password: res.temporaryPassword || newResetPassword.trim(),
+    });
+    setResetTargetUser(null);
   };
 
   const handleOpenAddModal = () => {
@@ -269,13 +318,14 @@ export const UserManagement: React.FC = () => {
                 <th className="py-3 px-4">Username</th>
                 <th className="py-3 px-4">Email</th>
                 <th className="py-3 px-4">Cohort / Specialization</th>
+                <th className="py-3 px-4">Credentials</th>
                 <th className="py-3 px-4 text-right">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-white/10">
               {filteredUsers.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="py-8 text-center text-xs text-slate-500">
+                  <td colSpan={7} className="py-8 text-center text-xs text-slate-500">
                     No matching users found in this institution. Click "+ Create User Account" to add one.
                   </td>
                 </tr>
@@ -326,6 +376,21 @@ export const UserManagement: React.FC = () => {
                           </span>
                         ) : (
                           <span className="text-slate-500">System Admin</span>
+                        )}
+                      </td>
+                      <td className="py-3.5 px-4">
+                        {u.role !== 'admin' ? (
+                          <button
+                            type="button"
+                            onClick={() => handleOpenResetModal(u)}
+                            className="px-2.5 py-1 text-[11px] font-semibold rounded-lg bg-purple-500/10 hover:bg-purple-500/20 text-purple-300 hover:text-white border border-purple-500/25 hover:border-purple-500/50 flex items-center gap-1.5 transition-all cursor-pointer"
+                            title={`Reset password for ${u.fullName}`}
+                          >
+                            <KeyRound className="w-3.5 h-3.5 text-pink-400" />
+                            <span>Reset Password</span>
+                          </button>
+                        ) : (
+                          <span className="text-[11px] text-slate-500 font-mono">Protected</span>
                         )}
                       </td>
                       <td className="py-3.5 px-4 text-right">
@@ -654,6 +719,128 @@ export const UserManagement: React.FC = () => {
                   ) : (
                     <>
                       <span>Create Account &amp; Issue Credentials</span>
+                      <Check className="w-4 h-4" />
+                    </>
+                  )}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Reset Password Modal */}
+      {resetTargetUser && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 overflow-y-auto">
+          <div className="bg-[#141124] rounded-3xl max-w-md w-full p-6 border border-white/15 shadow-2xl space-y-4 my-8">
+            <div className="flex justify-between items-center pb-3 border-b border-white/10">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-xl bg-purple-500/20 border border-purple-500/30 flex items-center justify-center text-purple-300">
+                  <KeyRound className="w-4 h-4 text-pink-400" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-white font-display">Reset Account Password</h3>
+                  <p className="text-[11px] text-slate-400">
+                    {resetTargetUser.fullName} &middot; <span className="capitalize text-purple-300 font-semibold">{resetTargetUser.role}</span>
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setResetTargetUser(null)}
+                className="p-1 text-slate-400 hover:text-white rounded-lg transition-colors cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-3 rounded-xl bg-black/40 border border-white/10 text-[11px] space-y-1 font-mono">
+              <div className="flex justify-between">
+                <span className="text-slate-400">USERNAME:</span>
+                <span className="text-purple-300 font-bold">{resetTargetUser.username}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-slate-400">EMAIL:</span>
+                <span className="text-slate-200">{resetTargetUser.email}</span>
+              </div>
+            </div>
+
+            <p className="text-[11px] text-slate-400 leading-relaxed">
+              Passwords cannot be recovered from the database because they are irreversibly hashed with bcrypt. You can assign a new password or auto-generate a secure temporary password.
+            </p>
+
+            <form onSubmit={handleConfirmResetPassword} className="space-y-4">
+              <div className="p-3.5 rounded-2xl bg-purple-950/20 border border-purple-500/20 space-y-2">
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-semibold text-purple-200">
+                    New Password (min 6 characters) *
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => setNewResetPassword(generateRandomPassword(resetTargetUser.role))}
+                    className="text-[11px] text-pink-400 hover:text-pink-300 font-medium inline-flex items-center gap-1 cursor-pointer"
+                  >
+                    <Sparkles className="w-3 h-3" />
+                    <span>Auto-Generate</span>
+                  </button>
+                </div>
+
+                <div className="relative">
+                  <input
+                    type={showResetPasswordInput ? 'text' : 'password'}
+                    required
+                    value={newResetPassword}
+                    onChange={(e) => setNewResetPassword(e.target.value)}
+                    placeholder="Enter new password"
+                    className="w-full pl-3 pr-10 py-2 text-xs bg-black/50 border border-white/15 rounded-xl text-white font-mono focus:outline-none focus:border-purple-500"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowResetPasswordInput(!showResetPasswordInput)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white cursor-pointer"
+                  >
+                    {showResetPasswordInput ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </button>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2 px-1">
+                <input
+                  type="checkbox"
+                  id="req-change-pwd"
+                  checked={requirePasswordChange}
+                  onChange={(e) => setRequirePasswordChange(e.target.checked)}
+                  className="rounded border-white/20 bg-black/40 text-purple-600 focus:ring-0 cursor-pointer"
+                />
+                <label htmlFor="req-change-pwd" className="text-xs text-slate-300 cursor-pointer">
+                  Require user to change password on next sign in
+                </label>
+              </div>
+
+              {resetError && (
+                <div className="p-3 rounded-xl bg-red-950/60 border border-red-500/40 text-xs text-red-200 flex items-center gap-2">
+                  <AlertCircle className="w-4 h-4 text-red-400 shrink-0" />
+                  <span>{resetError}</span>
+                </div>
+              )}
+
+              <div className="flex justify-end gap-3 pt-2 border-t border-white/10">
+                <button
+                  type="button"
+                  onClick={() => setResetTargetUser(null)}
+                  className="px-4 py-2 text-xs font-semibold text-slate-300 hover:text-white cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={resetLoading || !newResetPassword.trim()}
+                  className="px-5 py-2 text-xs font-semibold text-white bg-gradient-to-r from-purple-600 to-pink-600 rounded-xl hover:opacity-95 transition-all shadow-md shadow-purple-600/30 flex items-center gap-2 cursor-pointer disabled:opacity-50"
+                >
+                  {resetLoading ? (
+                    <span>Updating in Database...</span>
+                  ) : (
+                    <>
+                      <span>Save New Password</span>
                       <Check className="w-4 h-4" />
                     </>
                   )}

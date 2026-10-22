@@ -163,6 +163,86 @@ router.post('/:classId/allot-student', authorizeRoles('admin'), async (req, res)
 });
 
 /**
+ * POST /api/classes/:classId/bulk-allot
+ * Admin or Teacher assigns multiple students to a class in a single batch operation
+ */
+router.post('/:classId/bulk-allot', authorizeRoles('admin', 'teacher'), async (req, res) => {
+  try {
+    const { classId } = req.params;
+    const { studentIds } = req.body;
+
+    if (!Array.isArray(studentIds) || studentIds.length === 0) {
+      return res.status(400).json({ error: 'MissingStudents', message: 'Please provide at least one student ID to allot.' });
+    }
+
+    const targetClass = await req.tenantDb.Class.findById(classId);
+    if (!targetClass) {
+      return res.status(404).json({ error: 'ClassNotFound', message: 'Target class not found.' });
+    }
+
+    const cleanIds = studentIds.map((id) => String(id).trim()).filter(Boolean);
+    const validStudents = await req.tenantDb.User.find({
+      _id: { $in: cleanIds },
+      role: 'student',
+    });
+
+    if (validStudents.length === 0) {
+      return res.status(400).json({ error: 'NoValidStudents', message: 'No valid student accounts matched the provided IDs.' });
+    }
+
+    const targetClassIdStr = targetClass._id ? targetClass._id.toString() : targetClass.id;
+    let allottedCount = 0;
+
+    for (const student of validStudents) {
+      const studentIdStr = student._id ? student._id.toString() : student.id;
+
+      // If student was in another class, remove them from that class's studentIds
+      if (student.assignedClassId && student.assignedClassId !== targetClassIdStr) {
+        await req.tenantDb.Class.findByIdAndUpdate(student.assignedClassId, {
+          $pull: { studentIds: studentIdStr },
+        }).catch(() => null);
+      }
+
+      student.assignedClassId = targetClassIdStr;
+      if (!Array.isArray(student.assignedClassIds)) {
+        student.assignedClassIds = [];
+      }
+      if (!student.assignedClassIds.includes(targetClassIdStr)) {
+        student.assignedClassIds.push(targetClassIdStr);
+      }
+      await student.save();
+
+      // Add to target class
+      await req.tenantDb.Class.findByIdAndUpdate(targetClassIdStr, {
+        $addToSet: { studentIds: studentIdStr },
+      }).catch(() => null);
+
+      allottedCount++;
+    }
+
+    await dbManager.logActivity({
+      databaseName: req.databaseName,
+      institutionName: req.user?.institutionName || '',
+      actorName: req.user?.fullName || 'Admin',
+      actorRole: req.user?.role || 'admin',
+      actionCategory: 'CLASS_MGMT',
+      description: `Bulk allotted ${allottedCount} students to cohort "${targetClass.name}"`,
+    });
+
+    const updatedClass = await req.tenantDb.Class.findById(targetClassIdStr);
+
+    res.json({
+      success: true,
+      message: `Successfully assigned ${allottedCount} students to ${targetClass.name}.`,
+      allottedCount,
+      class: updatedClass ? (updatedClass.toObject ? updatedClass.toObject() : updatedClass) : targetClass,
+    });
+  } catch (err) {
+    res.status(500).json({ error: 'BulkAllotError', message: err.message });
+  }
+});
+
+/**
  * DELETE /api/classes/:id
  */
 router.delete('/:id', authorizeRoles('admin'), async (req, res) => {

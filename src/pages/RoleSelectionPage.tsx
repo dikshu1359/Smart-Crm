@@ -442,13 +442,18 @@ export const RoleSelectionPage: React.FC<RoleSelectionProps> = ({ initialRole })
                     onChange={(e) => setUsername(e.target.value)}
                     placeholder={
                       role === 'admin'
-                        ? 'e.g. apexadmin or admin@institution.edu'
+                        ? 'admin@smartcrm.local or administrator username'
                         : role === 'teacher'
                         ? 'e.g. jdoe or john.doe@institution.edu'
                         : 'e.g. student_id or student@institution.edu'
                     }
                     className="w-full px-3.5 py-2.5 text-xs rounded-xl bg-black/40 border border-white/10 text-white focus:outline-none focus:border-purple-500"
                   />
+                  {role === 'admin' && (
+                    <p className="text-[11px] text-purple-300/80 mt-1">
+                      Predefined identifier: <code className="text-purple-200 font-mono">admin@smartcrm.local</code> (or registered administrator account).
+                    </p>
+                  )}
                 </div>
 
                 <div>
@@ -474,11 +479,11 @@ export const RoleSelectionPage: React.FC<RoleSelectionProps> = ({ initialRole })
                       type="text"
                       value={adminInstitutionName}
                       onChange={(e) => setAdminInstitutionName(e.target.value)}
-                      placeholder="Enter institution name or leave blank to auto-detect"
+                      placeholder="e.g. VCET or your registered institution name"
                       className="w-full px-3.5 py-2.5 text-xs rounded-xl bg-black/40 border border-white/10 text-white focus:outline-none focus:border-purple-500"
                     />
                     <p className="text-[11px] text-slate-400 mt-1">
-                      Optional: Leave blank to auto-detect your institution across registered databases.
+                      Provide institution name if known, or leave blank to auto-detect across registered tenants.
                     </p>
                   </div>
                 ) : (
