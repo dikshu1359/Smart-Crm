@@ -182,6 +182,7 @@ export const api = {
     success: boolean;
     message?: string;
     text?: string;
+    image?: string;
     model?: string;
   }> {
     const res = await fetch(`${BASE_URL}/ai/chat`, {
@@ -193,6 +194,85 @@ export const api = {
       success: false,
       message: 'Failed to communicate with Study AI service.',
     });
+  },
+
+  async streamStudyAI(
+    databaseName: string,
+    prompt: string,
+    history: { role: 'user' | 'model'; content: string }[],
+    attachment: { name: string; mimeType: string; data: string; textContent?: string } | undefined,
+    onChunk: (accumulatedText: string) => void,
+    onImage: (imageUrl: string, caption?: string) => void,
+    signal?: AbortSignal
+  ): Promise<{ success: boolean; message?: string; text?: string; image?: string }> {
+    try {
+      const res = await fetch(`${BASE_URL}/ai/stream`, {
+        method: 'POST',
+        headers: getAuthHeaders(databaseName),
+        body: JSON.stringify({ prompt, history, attachment }),
+        signal,
+      });
+
+      if (!res.ok) {
+        const errJson = await safeJson(res, { message: `Request failed with status ${res.status}` });
+        return { success: false, message: errJson.message || `Request failed with status ${res.status}` };
+      }
+
+      if (!res.body) {
+        return { success: false, message: 'Response body stream is not available.' };
+      }
+
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder('utf-8');
+      let fullText = '';
+      let receivedImage = '';
+      let buffer = '';
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n');
+        buffer = lines.pop() || '';
+
+        for (const line of lines) {
+          const trimmed = line.trim();
+          if (!trimmed.startsWith('data:')) continue;
+          const dataStr = trimmed.slice(5).trim();
+          if (dataStr === '[DONE]') {
+            return { success: true, text: fullText, image: receivedImage };
+          }
+          try {
+            const parsed = JSON.parse(dataStr);
+            if (parsed.event === 'chunk' && parsed.text) {
+              fullText += parsed.text;
+              onChunk(fullText);
+            } else if (parsed.event === 'image') {
+              if (parsed.image) {
+                receivedImage = parsed.image;
+                onImage(parsed.image, parsed.text);
+              }
+              if (parsed.text) {
+                fullText = parsed.text;
+                onChunk(fullText);
+              }
+            } else if (parsed.event === 'error') {
+              return { success: false, message: parsed.message || 'Stream generation failed.' };
+            }
+          } catch {
+            // Ignore non-JSON stream chunks
+          }
+        }
+      }
+
+      return { success: true, text: fullText, image: receivedImage };
+    } catch (err: any) {
+      if (err.name === 'AbortError') {
+        return { success: true, message: 'Generation stopped.' };
+      }
+      return { success: false, message: err.message || 'Streaming communication error' };
+    }
   },
 
   // Classes

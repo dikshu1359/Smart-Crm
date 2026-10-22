@@ -12,6 +12,18 @@
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400..700;1,9..40,400..700&family=JetBrains+Mono:wght@400;500;600&family=Plus+Jakarta+Sans:wght@500;600;700;800&display=swap" rel="stylesheet" />
+    <script>
+      // Suppress benign Vite HMR websocket drops in preview/iframe/cloud environments
+      window.addEventListener('unhandledrejection', function (e) {
+        if (
+          e.reason &&
+          (String(e.reason).includes('WebSocket closed without opened') ||
+           String(e.reason?.message).includes('WebSocket closed without opened'))
+        ) {
+          e.preventDefault();
+        }
+      });
+    </script>
   </head>
   <body class="bg-[#0B0A14] text-slate-100 antialiased selection:bg-purple-500/30 selection:text-pink-200">
     <div id="root"></div>

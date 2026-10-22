@@ -18,10 +18,15 @@ import {
   Users,
   BookOpen,
   UploadCloud,
+  FileSpreadsheet,
+  Download,
+  RefreshCw,
 } from 'lucide-react';
+import * as XLSX from 'xlsx';
 import { useApp } from '../context/AppContext';
 import { TenantUser, SchoolClass } from '../types/crm';
 import { BulkUserImportModal } from './BulkUserImportModal';
+import api from '../services/api';
 
 export const UserManagement: React.FC = () => {
   const { activeTenant, users, classes, createUser, deleteUser, refreshData, resetUserPassword } = useApp();
@@ -31,6 +36,8 @@ export const UserManagement: React.FC = () => {
   const [showBulkModal, setShowBulkModal] = useState(false);
   const [roleFilter, setRoleFilter] = useState<'all' | 'teacher' | 'student'>('all');
   const [searchQuery, setSearchQuery] = useState('');
+  const [exportLoading, setExportLoading] = useState(false);
+  const [exportFeedback, setExportFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
 
   // Password reset modal states
   const [resetTargetUser, setResetTargetUser] = useState<TenantUser | null>(null);
@@ -220,6 +227,166 @@ export const UserManagement: React.FC = () => {
     setTimeout(() => setCopied(false), 2500);
   };
 
+  const handleExportToExcel = async () => {
+    if (!activeTenant) return;
+    setExportLoading(true);
+    setExportFeedback(null);
+
+    try {
+      // Fetch fresh, full user records from the tenant database
+      const roleParam = roleFilter !== 'all' ? roleFilter : undefined;
+      const res = await api.getUsers(activeTenant.databaseName, roleParam);
+
+      let rawAccounts: TenantUser[] = [];
+      if (res?.users && Array.isArray(res.users)) {
+        rawAccounts = res.users;
+      } else {
+        rawAccounts = users.filter((u: TenantUser) => {
+          if (roleFilter !== 'all' && u.role !== roleFilter) return false;
+          return true;
+        });
+      }
+
+      if (rawAccounts.length === 0) {
+        setExportFeedback({
+          type: 'error',
+          message: `No ${roleFilter === 'all' ? '' : roleFilter + ' '}account records found in database to export.`,
+        });
+        setExportLoading(false);
+        return;
+      }
+
+      // Map rows strictly excluding any passwords or hashes
+      const excelRows = rawAccounts.map((u: any) => {
+        let className = 'N/A';
+        if (u.role === 'student') {
+          if (u.assignedClassId) {
+            const matched = classes.find(
+              (c) => String(c.id || (c as any)._id) === String(u.assignedClassId)
+            );
+            className = matched ? matched.name : (u.gradeLevel || 'Enrolled');
+          } else if (u.gradeLevel) {
+            className = u.gradeLevel;
+          }
+        } else if (u.role === 'teacher') {
+          const assignedIds = Array.isArray(u.assignedClassIds) ? u.assignedClassIds : [];
+          if (assignedIds.length > 0) {
+            const names = assignedIds.map((cid: string) => {
+              const match = classes.find(
+                (c) => String(c.id || (c as any)._id) === String(cid)
+              );
+              return match ? match.name : cid;
+            });
+            className = names.join(', ');
+          } else {
+            className = 'Faculty (General)';
+          }
+        }
+
+        let division = 'N/A';
+        if (u.role === 'student') {
+          if (u.assignedClassId) {
+            const matched = classes.find(
+              (c) => String(c.id || (c as any)._id) === String(u.assignedClassId)
+            );
+            division = matched?.section || u.classDivision || 'Section A';
+          } else {
+            division = u.classDivision || 'Section A';
+          }
+        }
+
+        const roleLabel =
+          u.role === 'teacher'
+            ? 'Teacher'
+            : u.role === 'student'
+            ? 'Student'
+            : 'Admin';
+
+        const rollNumberVal =
+          u.role === 'student'
+            ? (u.rollNumber || (u as any).admissionId || 'N/A')
+            : 'N/A';
+
+        const branchVal =
+          u.departmentBranch ||
+          (u.role === 'teacher' ? (u.specialization || 'Academic Faculty') : 'General Academics');
+
+        const specializationVal =
+          u.specialization ||
+          (u.role === 'teacher' ? (u.qualification || 'Faculty Member') : 'N/A');
+
+        const accountStatus = u.status || 'Active';
+
+        return {
+          'Role': roleLabel,
+          'Student Roll Number': rollNumberVal,
+          'Full Name': u.fullName || 'N/A',
+          'Username': u.username || 'N/A',
+          'User ID': String(u.id || (u as any)._id || ''),
+          'Email': u.email || 'N/A',
+          'Class': className,
+          'Division': division,
+          'Branch / Department': branchVal,
+          'Specialization': specializationVal,
+          'Account Status': accountStatus,
+        };
+      });
+
+      // Build XLSX workbook with readable column widths and headers
+      const ws = XLSX.utils.json_to_sheet(excelRows);
+      ws['!cols'] = [
+        { wch: 14 }, // Role
+        { wch: 22 }, // Student Roll Number
+        { wch: 28 }, // Full Name
+        { wch: 22 }, // Username
+        { wch: 30 }, // User ID
+        { wch: 32 }, // Email
+        { wch: 24 }, // Class
+        { wch: 16 }, // Division
+        { wch: 26 }, // Branch / Department
+        { wch: 26 }, // Specialization
+        { wch: 16 }, // Account Status
+      ];
+
+      const wb = XLSX.utils.book_new();
+      const sheetTitle =
+        roleFilter === 'all'
+          ? 'All Accounts'
+          : roleFilter === 'teacher'
+          ? 'Teacher Accounts'
+          : 'Student Accounts';
+      XLSX.utils.book_append_sheet(wb, ws, sheetTitle);
+
+      const institutionSlug = (activeTenant.institutionName || 'institution')
+        .replace(/[^a-zA-Z0-9_-]/g, '_')
+        .toLowerCase();
+      const categorySlug =
+        roleFilter === 'all'
+          ? 'all_accounts'
+          : roleFilter === 'teacher'
+          ? 'teachers'
+          : 'students';
+      const dateStamp = new Date().toISOString().split('T')[0];
+      const filename = `${institutionSlug}_${categorySlug}_${dateStamp}.xlsx`;
+
+      XLSX.writeFile(wb, filename);
+
+      setExportFeedback({
+        type: 'success',
+        message: `Successfully exported ${excelRows.length} account records to "${filename}".`,
+      });
+      setTimeout(() => setExportFeedback(null), 6000);
+    } catch (err: any) {
+      console.error('[Excel Export] Error:', err);
+      setExportFeedback({
+        type: 'error',
+        message: err.message || 'Failed to generate Excel export file.',
+      });
+    } finally {
+      setExportLoading(false);
+    }
+  };
+
   const teachers = users.filter((u: TenantUser) => u.role === 'teacher');
   const students = users.filter((u: TenantUser) => u.role === 'student');
 
@@ -248,6 +415,19 @@ export const UserManagement: React.FC = () => {
         </div>
         <div className="flex flex-wrap items-center gap-2.5 shrink-0 self-start sm:self-auto">
           <button
+            onClick={handleExportToExcel}
+            disabled={exportLoading}
+            className="px-4 py-2.5 text-xs font-semibold text-emerald-200 bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/30 hover:border-emerald-500/60 rounded-xl transition-all flex items-center gap-2 cursor-pointer shadow-sm disabled:opacity-50"
+            title="Export all database account records for the selected category to Excel (.xlsx)"
+          >
+            {exportLoading ? (
+              <RefreshCw className="w-4 h-4 text-emerald-400 animate-spin" />
+            ) : (
+              <FileSpreadsheet className="w-4 h-4 text-emerald-400" />
+            )}
+            <span>{exportLoading ? 'Exporting...' : 'Export to Excel'}</span>
+          </button>
+          <button
             onClick={() => setShowBulkModal(true)}
             className="px-4 py-2.5 text-xs font-semibold text-purple-200 bg-white/[0.05] hover:bg-white/[0.1] border border-purple-500/30 hover:border-purple-500/60 rounded-xl transition-all flex items-center gap-2 cursor-pointer shadow-sm"
           >
@@ -263,6 +443,32 @@ export const UserManagement: React.FC = () => {
           </button>
         </div>
       </div>
+
+      {/* Export feedback alert banner */}
+      {exportFeedback && (
+        <div
+          className={`p-3 rounded-xl border flex items-center justify-between text-xs transition-all ${
+            exportFeedback.type === 'success'
+              ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-300'
+              : 'bg-rose-500/10 border-rose-500/30 text-rose-300'
+          }`}
+        >
+          <div className="flex items-center gap-2">
+            {exportFeedback.type === 'success' ? (
+              <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+            ) : (
+              <AlertCircle className="w-4 h-4 text-rose-400 shrink-0" />
+            )}
+            <span>{exportFeedback.message}</span>
+          </div>
+          <button
+            onClick={() => setExportFeedback(null)}
+            className="p-1 hover:opacity-80 cursor-pointer"
+          >
+            <X className="w-3.5 h-3.5" />
+          </button>
+        </div>
+      )}
 
       {/* Filter and Search Bar */}
       <div className="p-4 rounded-2xl bg-white/[0.03] border border-white/10 flex flex-col sm:flex-row sm:items-center justify-between gap-4">

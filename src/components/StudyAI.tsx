@@ -17,6 +17,8 @@ import {
   Square,
   FileUp,
   Image as ImageIcon,
+  Download,
+  RefreshCw,
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import api from '../services/api';
@@ -27,10 +29,13 @@ interface ChatMessage {
   role: 'user' | 'model';
   content: string;
   timestamp: string;
+  image?: string;
+  isStreaming?: boolean;
   attachment?: {
     name: string;
     mimeType: string;
     size: string;
+    data?: string;
   };
 }
 
@@ -77,12 +82,12 @@ export const StudyAI: React.FC = () => {
   const quickPrompts = [
     {
       title: 'Operating Systems & Deadlocks',
-      prompt: 'Explain Banker\'s Algorithm and the four necessary conditions for deadlocks in operating systems with examples.',
+      prompt: 'Explain Banker\'s Algorithm and the four necessary conditions for deadlocks in operating systems with step-by-step examples.',
       icon: Cpu,
     },
     {
       title: 'Data Structures & Algorithms',
-      prompt: 'Provide a step-by-step explanation and TypeScript/C++ implementation of Dijkstra\'s Shortest Path algorithm with time complexity.',
+      prompt: 'Provide a step-by-step explanation and TypeScript/Python implementation of Dijkstra\'s Shortest Path algorithm with time complexity.',
       icon: Code2,
     },
     {
@@ -91,9 +96,9 @@ export const StudyAI: React.FC = () => {
       icon: Calculator,
     },
     {
-      title: 'Exam Revision & Study Plan',
-      prompt: 'Create a structured 7-day revision schedule and key practice questions for a university database systems mid-term examination.',
-      icon: GraduationCap,
+      title: 'Diagram & Visual Generation',
+      prompt: 'Generate an illustration of the water cycle with evaporation, condensation, precipitation, and runoff labeled.',
+      icon: ImageIcon,
     },
   ];
 
@@ -175,6 +180,7 @@ export const StudyAI: React.FC = () => {
   };
 
   const handleSend = async (customPrompt?: string) => {
+    if (loading) return; // Prevent duplicate requests
     const textToSend = customPrompt || inputText;
     if (!textToSend.trim() && !pendingAttachment) return;
 
@@ -190,12 +196,22 @@ export const StudyAI: React.FC = () => {
             name: pendingAttachment.name,
             size: pendingAttachment.size,
             mimeType: pendingAttachment.mimeType,
+            data: pendingAttachment.data,
           }
         : undefined,
     };
 
+    const modelMsgId = 'msg-' + (Date.now() + 1);
+    const initialModelTurn: ChatMessage = {
+      id: modelMsgId,
+      role: 'model',
+      content: '',
+      timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      isStreaming: true,
+    };
+
     const updatedMessages = [...messages, userTurn];
-    setMessages(updatedMessages);
+    setMessages([...updatedMessages, initialModelTurn]);
     setInputText('');
 
     const attachmentPayload = pendingAttachment
@@ -210,36 +226,93 @@ export const StudyAI: React.FC = () => {
     setPendingAttachment(null);
     setLoading(true);
 
+    const abortController = new AbortController();
+    abortControllerRef.current = abortController;
+
     try {
       const historyTurns = messages.map((m) => ({
         role: m.role,
         content: m.content,
       }));
 
-      const res = await api.askStudyAI(
+      const res = await api.streamStudyAI(
         activeTenant?.databaseName || '',
         textToSend.trim(),
         historyTurns,
-        attachmentPayload
+        attachmentPayload,
+        (chunkText) => {
+          setMessages((prev) =>
+            prev.map((m) =>
+              m.id === modelMsgId ? { ...m, content: chunkText, isStreaming: true } : m
+            )
+          );
+        },
+        (imageUrl, caption) => {
+          setMessages((prev) =>
+            prev.map((m) =>
+              m.id === modelMsgId
+                ? {
+                    ...m,
+                    image: imageUrl,
+                    content: caption || m.content || 'Here is the requested diagram.',
+                    isStreaming: false,
+                  }
+                : m
+            )
+          );
+        },
+        abortController.signal
       );
 
       if (!res.success) {
-        setErrorMessage(res.message || 'Unable to connect to Study AI. Please check your network or server configuration.');
-        return;
+        // Fallback to standard non-streaming askStudyAI
+        const fallbackRes = await api.askStudyAI(
+          activeTenant?.databaseName || '',
+          textToSend.trim(),
+          historyTurns,
+          attachmentPayload
+        );
+
+        if (!fallbackRes.success) {
+          setErrorMessage(fallbackRes.message || res.message || 'Unable to connect to Study AI. Please check your network or server configuration.');
+          setMessages((prev) => prev.filter((m) => m.id !== modelMsgId));
+          return;
+        }
+
+        setMessages((prev) =>
+          prev.map((m) =>
+            m.id === modelMsgId
+              ? {
+                  ...m,
+                  content: fallbackRes.text || '',
+                  image: fallbackRes.image,
+                  isStreaming: false,
+                }
+              : m
+          )
+        );
+      } else {
+        setMessages((prev) =>
+          prev.map((m) =>
+            m.id === modelMsgId
+              ? {
+                  ...m,
+                  content: m.content || res.text || '',
+                  image: m.image || res.image,
+                  isStreaming: false,
+                }
+              : m
+          )
+        );
       }
-
-      const modelTurn: ChatMessage = {
-        id: 'msg-' + (Date.now() + 1),
-        role: 'model',
-        content: res.text || 'No response returned from the model.',
-        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-      };
-
-      setMessages([...updatedMessages, modelTurn]);
     } catch (err: any) {
-      setErrorMessage(err.message || 'An unexpected error occurred while communicating with Study AI.');
+      if (err.name !== 'AbortError') {
+        setErrorMessage(err.message || 'An unexpected error occurred while communicating with Study AI.');
+        setMessages((prev) => prev.filter((m) => m.id !== modelMsgId));
+      }
     } finally {
       setLoading(false);
+      abortControllerRef.current = null;
     }
   };
 
@@ -361,14 +434,66 @@ export const StudyAI: React.FC = () => {
                   >
                     {/* Attachment preview if user uploaded one */}
                     {msg.attachment && (
-                      <div className="mb-2.5 p-2 rounded-lg bg-black/30 border border-white/10 flex items-center gap-2 text-[11px]">
-                        <FileText className="w-3.5 h-3.5 text-purple-400 shrink-0" />
-                        <span className="truncate font-mono">{msg.attachment.name}</span>
-                        <span className="text-slate-400 text-[10px] shrink-0">({msg.attachment.size})</span>
+                      <div className="mb-2.5 p-2 rounded-lg bg-black/30 border border-white/10 flex items-center gap-2.5 text-[11px]">
+                        {msg.attachment.mimeType.startsWith('image/') && msg.attachment.data ? (
+                          <img
+                            src={msg.attachment.data}
+                            alt={msg.attachment.name}
+                            className="w-10 h-10 object-cover rounded-md border border-white/10 shrink-0"
+                          />
+                        ) : (
+                          <FileText className="w-4 h-4 text-purple-400 shrink-0" />
+                        )}
+                        <div className="truncate flex-1">
+                          <p className="truncate font-mono">{msg.attachment.name}</p>
+                          <span className="text-slate-400 text-[10px]">({msg.attachment.size})</span>
+                        </div>
                       </div>
                     )}
 
-                    <div>{msg.content}</div>
+                    {/* Message Text or live token stream */}
+                    {msg.isStreaming && !msg.content ? (
+                      <div className="flex items-center gap-2 py-1 text-slate-400">
+                        <div className="flex items-center gap-1">
+                          <span className="w-1.5 h-1.5 rounded-full bg-purple-400 animate-pulse" />
+                          <span className="w-1.5 h-1.5 rounded-full bg-pink-400 animate-pulse delay-100" />
+                          <span className="w-1.5 h-1.5 rounded-full bg-cyan-400 animate-pulse delay-200" />
+                        </div>
+                        <span className="text-[11px]">Reasoning and drafting response...</span>
+                      </div>
+                    ) : (
+                      <div className="font-sans leading-relaxed">
+                        {msg.content}
+                        {msg.isStreaming && (
+                          <span className="inline-block w-1.5 h-3 ml-1 bg-purple-400 animate-pulse align-middle" />
+                        )}
+                      </div>
+                    )}
+
+                    {/* Generated Visual / Educational Diagram */}
+                    {msg.image && (
+                      <div className="mt-3 overflow-hidden rounded-xl border border-purple-500/30 bg-black/40 p-2.5 shadow-lg">
+                        <img
+                          src={msg.image}
+                          alt="Generated educational diagram"
+                          className="max-h-80 w-auto rounded-lg object-contain mx-auto border border-white/10"
+                        />
+                        <div className="mt-2.5 flex items-center justify-between px-1">
+                          <span className="text-[11px] text-purple-300 font-medium flex items-center gap-1.5">
+                            <Sparkles className="w-3.5 h-3.5 text-purple-400" />
+                            <span>Educational Visual</span>
+                          </span>
+                          <a
+                            href={msg.image}
+                            download="study-ai-diagram.png"
+                            className="inline-flex items-center gap-1.5 px-3 py-1 text-[11px] font-semibold text-white bg-purple-600/90 hover:bg-purple-600 rounded-lg transition-colors cursor-pointer shadow-sm"
+                          >
+                            <Download className="w-3 h-3" />
+                            <span>Download Image</span>
+                          </a>
+                        </div>
+                      </div>
+                    )}
                   </div>
 
                   {/* Actions & Timestamp */}
@@ -378,7 +503,7 @@ export const StudyAI: React.FC = () => {
                     }`}
                   >
                     <span>{msg.timestamp}</span>
-                    {!isUser && (
+                    {!isUser && msg.content && (
                       <button
                         onClick={() => handleCopy(msg.id, msg.content)}
                         className="inline-flex items-center gap-1 text-slate-400 hover:text-white transition-colors cursor-pointer"
@@ -404,8 +529,8 @@ export const StudyAI: React.FC = () => {
           })
         )}
 
-        {/* Loading Bubble */}
-        {loading && (
+        {/* Global Loading Bubble if no model bubble is active */}
+        {loading && (!messages.length || !messages.some((m) => m.isStreaming)) && (
           <div className="flex gap-3 max-w-xl mr-auto">
             <div className="w-7 h-7 rounded-xl bg-white/10 text-purple-300 border border-purple-500/30 flex items-center justify-center shrink-0">
               <Sparkles className="w-3.5 h-3.5 animate-spin" />
@@ -416,7 +541,7 @@ export const StudyAI: React.FC = () => {
                 <span className="w-2 h-2 rounded-full bg-pink-400 animate-pulse delay-100" />
                 <span className="w-2 h-2 rounded-full bg-cyan-400 animate-pulse delay-200" />
               </div>
-              <span>Formulating solution...</span>
+              <span>Connecting to Study AI...</span>
               <button
                 onClick={handleStopGeneration}
                 className="ml-3 px-2 py-0.5 text-[10px] text-slate-400 hover:text-white bg-white/5 hover:bg-white/10 rounded-md border border-white/10 cursor-pointer flex items-center gap-1"

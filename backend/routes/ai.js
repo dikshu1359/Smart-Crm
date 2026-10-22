@@ -22,22 +22,268 @@ const getAiClient = () => {
   });
 };
 
-const SYSTEM_INSTRUCTION = `You are Study AI, a world-class academic tutor and learning assistant embedded within an educational institution CRM.
-You serve students and faculty across disciplines including Computer Science, Software Engineering, Mathematics, Data Science, Electrical Engineering, Physics, and General STEM.
+const SYSTEM_INSTRUCTION = `You are Study AI, an advanced, world-class academic tutor and institutional learning assistant embedded in an Educational Institution CRM.
+You serve faculty and students across disciplines, including Computer Science, Software Engineering, Discrete Mathematics, Linear Algebra, Calculus, Physics, Electrical Engineering, and general STEM academia.
 
-Core Responsibilities:
-1. Provide accurate, clear, and comprehensive explanations of concepts, formulas, algorithms, and theory.
-2. Provide step-by-step solutions to mathematical, algorithmic, and engineering problems.
-3. Structure your responses with clean Markdown, clear headings, code blocks with syntax highlighting where applicable, and bulleted takeaways.
-4. Help students prepare for exams, revise core topics, generate practice questions, and clarify assignment doubts.
-5. If analyzing uploaded documents or notes (PDF, DOCX, TXT, or images), extract key definitions, summarize chapters, and answer questions grounded directly in the provided material.
-6. Clearly distinguish AI conceptual guidance from official institutional records: remind users that official marks, attendance status, and degree evaluations are recorded in the university database.
+Core Academic Principles:
+1. RELEVANCE & ACCURACY:
+   - Carefully read and parse the user's complete prompt and any attached study material or problem images before answering.
+   - Answer the exact question asked without generic filler or evasive answers.
+   - For concise questions, give direct, focused answers.
+   - For complex, mathematical, or algorithmic questions, provide step-by-step reasoning, formula derivations, code implementations with time/space complexities, and edge cases.
+   - If information is insufficient or ambiguous, state what is known and clarify what is missing. Never invent facts, formulas, or academic citations.
+
+2. HOMEWORK & ATTACHMENT SOLVING:
+   - When an image or document (PDF, DOCX, text) is attached, analyze the actual content carefully.
+   - Transcribe or reference the specific problem, numbers, equations, and diagrams from the user's attachment.
+   - Walk through the solution step-by-step so the student can learn the methodology.
+
+3. CONVERSATIONAL MEMORY:
+   - Maintain context across follow-up queries. If the student asks "can you explain step 2 in more detail?" or "write tests for that", refer directly to the prior solution.
+
+4. FORMATTING:
+   - Use clean, readable Markdown with structured headers (##, ###), bulleted highlights, and bold terminology.
+   - Render mathematical equations cleanly using LaTeX notation or clear mathematical typesetting.
+   - Write code blocks with language identifiers (\`\`\`python, \`\`\`typescript, \`\`\`java, \`\`\`cpp).
+
+5. INSTITUTIONAL BOUNDARY:
+   - Remind users when relevant that official grades, course enrollment, and attendance records are stored authoritatively in the institution CRM database.
 `;
+
+function isImageGenerationPrompt(prompt) {
+  if (!prompt || typeof prompt !== 'string') return false;
+  const p = prompt.trim().toLowerCase();
+  const patterns = [
+    /\b(generate|create|draw|make|render|illustrate|produce|show me)\b.*\b(an?\s+)?(image|illustration|diagram|picture|drawing|sketch|infographic|visual|figure)\b/i,
+    /\b(image|illustration|diagram|picture|drawing|figure)\s+of\b/i,
+    /^(can you |please )?(draw|illustrate|render)\b/i,
+  ];
+  return patterns.some((rx) => rx.test(p));
+}
+
+async function generateEducationalImage(ai, prompt) {
+  let imageUrl = null;
+  let explanation = '';
+  let modelUsed = 'gemini-3.1-flash-lite-image';
+
+  // Attempt 1: gemini-3.1-flash-lite-image
+  try {
+    const res = await ai.models.generateContent({
+      model: 'gemini-3.1-flash-lite-image',
+      contents: {
+        parts: [
+          {
+            text: `Generate a clear, accurate, high-quality educational illustration/diagram for: "${prompt}". Clean textbook diagram style with distinct labels.`,
+          },
+        ],
+      },
+      config: {
+        imageConfig: {
+          aspectRatio: '1:1',
+        },
+      },
+    });
+
+    if (res.candidates?.[0]?.content?.parts) {
+      for (const part of res.candidates[0].content.parts) {
+        if (part.inlineData) {
+          const mime = part.inlineData.mimeType || 'image/png';
+          imageUrl = `data:${mime};base64,${part.inlineData.data}`;
+        } else if (part.text) {
+          explanation += part.text;
+        }
+      }
+    }
+  } catch (err) {
+    console.warn('[Study AI] gemini-3.1-flash-lite-image attempt:', err.message);
+  }
+
+  // Attempt 2 fallback: imagen-3.0-generate-002
+  if (!imageUrl) {
+    try {
+      const imagenRes = await ai.models.generateImages({
+        model: 'imagen-3.0-generate-002',
+        prompt: `Educational textbook illustration: ${prompt}. High quality, detailed diagram, accurate educational visual.`,
+        config: {
+          numberOfImages: 1,
+          outputMimeType: 'image/jpeg',
+          aspectRatio: '1:1',
+        },
+      });
+      if (imagenRes.generatedImages?.[0]?.image?.imageBytes) {
+        imageUrl = `data:image/jpeg;base64,${imagenRes.generatedImages[0].image.imageBytes}`;
+        modelUsed = 'imagen-3.0-generate-002';
+      }
+    } catch (imgErr) {
+      console.warn('[Study AI] imagen-3.0-generate-002 fallback attempt:', imgErr.message);
+    }
+  }
+
+  return { imageUrl, explanation, modelUsed };
+}
+
+function buildGeminiContents(history, prompt, attachment) {
+  const contents = [];
+
+  // Add prior conversation history (limited to last 10 turns)
+  if (Array.isArray(history) && history.length > 0) {
+    const recentHistory = history.slice(-10);
+    for (const turn of recentHistory) {
+      if (!turn.content) continue;
+      contents.push({
+        role: turn.role === 'user' ? 'user' : 'model',
+        parts: [{ text: String(turn.content) }],
+      });
+    }
+  }
+
+  // Current turn parts
+  const currentParts = [];
+
+  if (attachment && attachment.data) {
+    const mime = attachment.mimeType || 'text/plain';
+    if (mime.startsWith('image/')) {
+      const cleanBase64 = attachment.data.includes(',')
+        ? attachment.data.split(',')[1]
+        : attachment.data;
+      currentParts.push({
+        inlineData: {
+          mimeType: mime,
+          data: cleanBase64,
+        },
+      });
+    } else if (mime === 'application/pdf') {
+      const cleanBase64 = attachment.data.includes(',')
+        ? attachment.data.split(',')[1]
+        : attachment.data;
+      currentParts.push({
+        inlineData: {
+          mimeType: 'application/pdf',
+          data: cleanBase64,
+        },
+      });
+    } else {
+      const textContent = attachment.textContent || attachment.data;
+      currentParts.push({
+        text: `[Attached Study Material: ${attachment.name || 'document'}]\n${textContent.slice(0, 35000)}`,
+      });
+    }
+  }
+
+  currentParts.push({ text: prompt.trim() });
+
+  contents.push({
+    role: 'user',
+    parts: currentParts,
+  });
+
+  return contents;
+}
+
+/**
+ * POST /api/ai/stream
+ * Server-Sent Events (SSE) streaming endpoint for near-instant perceived latency.
+ * Restricted to Teacher and Student roles only.
+ */
+router.post('/stream', async (req, res) => {
+  try {
+    const userRole = req.user?.role;
+    if (userRole === 'admin') {
+      return res.status(403).json({
+        error: 'Forbidden',
+        message: 'Study AI is reserved for educators and students. Institutional administrators monitor academic analytics via the Admin Dashboard.',
+      });
+    }
+
+    const { prompt, history, attachment } = req.body;
+    if (!prompt || typeof prompt !== 'string' || !prompt.trim()) {
+      return res.status(400).json({
+        error: 'MissingPrompt',
+        message: 'Please provide a question or topic for Study AI.',
+      });
+    }
+
+    const ai = getAiClient();
+    if (!ai) {
+      return res.status(503).json({
+        error: 'ApiKeyMissing',
+        message: 'Study AI service is ready, but the server GEMINI_API_KEY environment variable is not configured.',
+      });
+    }
+
+    // Set headers for Server-Sent Events
+    res.setHeader('Content-Type', 'text/event-stream');
+    res.setHeader('Cache-Control', 'no-cache, no-transform');
+    res.setHeader('Connection', 'keep-alive');
+    if (res.flushHeaders) res.flushHeaders();
+
+    // Explicit Image Generation Request
+    if (isImageGenerationPrompt(prompt) && (!attachment || !attachment.data)) {
+      const { imageUrl, explanation, modelUsed } = await generateEducationalImage(ai, prompt);
+      if (imageUrl) {
+        res.write(
+          `data: ${JSON.stringify({
+            event: 'image',
+            image: imageUrl,
+            text: explanation || `Here is the generated educational illustration for: "${prompt.trim()}".`,
+            model: modelUsed,
+          })}\n\n`
+        );
+        res.write('data: [DONE]\n\n');
+        return res.end();
+      }
+    }
+
+    // Streaming text / multimodal content with gemini-3.8-flash
+    const contents = buildGeminiContents(history, prompt, attachment);
+
+    const streamResponse = await ai.models.generateContentStream({
+      model: 'gemini-3.8-flash',
+      contents,
+      config: {
+        systemInstruction: SYSTEM_INSTRUCTION,
+        temperature: 0.7,
+      },
+    });
+
+    for await (const chunk of streamResponse) {
+      if (chunk.text) {
+        res.write(`data: ${JSON.stringify({ event: 'chunk', text: chunk.text })}\n\n`);
+      }
+    }
+
+    res.write('data: [DONE]\n\n');
+    res.end();
+
+    // Log query in background
+    dbManager
+      .logActivity({
+        databaseName: req.databaseName,
+        institutionName: req.user?.institutionName || '',
+        actorName: req.user?.fullName || req.user?.username,
+        actorRole: req.user?.role,
+        actionCategory: 'STUDY_AI',
+        description: `Study AI query: "${prompt.slice(0, 60)}${prompt.length > 60 ? '...' : ''}"`,
+      })
+      .catch(() => null);
+  } catch (err) {
+    console.error('[Study AI Stream] Error generating response:', err.message);
+    if (!res.headersSent) {
+      return res.status(500).json({
+        error: 'AiGenerationFailed',
+        message: err.message || 'An error occurred while contacting Study AI.',
+      });
+    }
+    res.write(`data: ${JSON.stringify({ event: 'error', message: err.message })}\n\n`);
+    res.write('data: [DONE]\n\n');
+    res.end();
+  }
+});
 
 /**
  * POST /api/ai/chat
- * Conversational learning assistant for Teacher and Student roles only.
- * Admins are strictly prohibited from Study AI to maintain role segregation.
+ * Standard JSON endpoint for single-turn or batch requests.
+ * Restricted to Teacher and Student roles only.
  */
 router.post('/chat', async (req, res) => {
   try {
@@ -50,7 +296,6 @@ router.post('/chat', async (req, res) => {
     }
 
     const { prompt, history, attachment } = req.body;
-
     if (!prompt || typeof prompt !== 'string' || !prompt.trim()) {
       return res.status(400).json({
         error: 'MissingPrompt',
@@ -62,67 +307,24 @@ router.post('/chat', async (req, res) => {
     if (!ai) {
       return res.status(503).json({
         error: 'ApiKeyMissing',
-        message: 'Study AI service is ready, but the server GEMINI_API_KEY environment variable is not configured. Please configure GEMINI_API_KEY in your hosting environment (Settings > Secrets or Vercel Environment Variables).',
+        message: 'Study AI service is ready, but the server GEMINI_API_KEY environment variable is not configured.',
       });
     }
 
-    // Build contents structure
-    const contents = [];
-
-    // Add prior conversation history (limited to last 10 turns to avoid token overflow)
-    if (Array.isArray(history) && history.length > 0) {
-      const recentHistory = history.slice(-10);
-      for (const turn of recentHistory) {
-        if (!turn.content) continue;
-        contents.push({
-          role: turn.role === 'user' ? 'user' : 'model',
-          parts: [{ text: String(turn.content) }],
+    // Explicit Image Generation Request
+    if (isImageGenerationPrompt(prompt) && (!attachment || !attachment.data)) {
+      const { imageUrl, explanation, modelUsed } = await generateEducationalImage(ai, prompt);
+      if (imageUrl) {
+        return res.json({
+          success: true,
+          text: explanation || `Here is the requested educational illustration for: "${prompt.trim()}".`,
+          image: imageUrl,
+          model: modelUsed,
         });
       }
     }
 
-    // Current turn parts
-    const currentParts = [];
-
-    // Process optional attachment
-    if (attachment && attachment.data) {
-      const mime = attachment.mimeType || 'text/plain';
-      if (mime.startsWith('image/')) {
-        // Base64 inline image data
-        const cleanBase64 = attachment.data.includes(',')
-          ? attachment.data.split(',')[1]
-          : attachment.data;
-        currentParts.push({
-          inlineData: {
-            mimeType: mime,
-            data: cleanBase64,
-          },
-        });
-      } else if (mime === 'application/pdf') {
-        const cleanBase64 = attachment.data.includes(',')
-          ? attachment.data.split(',')[1]
-          : attachment.data;
-        currentParts.push({
-          inlineData: {
-            mimeType: 'application/pdf',
-            data: cleanBase64,
-          },
-        });
-      } else {
-        // Text / DOCX raw extracted text
-        const textContent = attachment.textContent || attachment.data;
-        currentParts.push({
-          text: `[Attached Document: ${attachment.name || 'document'}]\n${textContent.slice(0, 30000)}`,
-        });
-      }
-    }
-
-    currentParts.push({ text: prompt.trim() });
-
-    contents.push({
-      role: 'user',
-      parts: currentParts,
-    });
+    const contents = buildGeminiContents(history, prompt, attachment);
 
     const response = await ai.models.generateContent({
       model: 'gemini-3.8-flash',
@@ -136,14 +338,16 @@ router.post('/chat', async (req, res) => {
     const responseText = response.text || 'I could not generate an answer. Please try rephrasing your question.';
 
     // Log query in activity log
-    await dbManager.logActivity({
-      databaseName: req.databaseName,
-      institutionName: req.user?.institutionName || '',
-      actorName: req.user?.fullName || req.user?.username,
-      actorRole: req.user?.role,
-      actionCategory: 'STUDY_AI',
-      description: `Study AI consultation on: "${prompt.slice(0, 60)}${prompt.length > 60 ? '...' : ''}"`,
-    }).catch(() => null);
+    await dbManager
+      .logActivity({
+        databaseName: req.databaseName,
+        institutionName: req.user?.institutionName || '',
+        actorName: req.user?.fullName || req.user?.username,
+        actorRole: req.user?.role,
+        actionCategory: 'STUDY_AI',
+        description: `Study AI consultation on: "${prompt.slice(0, 60)}${prompt.length > 60 ? '...' : ''}"`,
+      })
+      .catch(() => null);
 
     res.json({
       success: true,
@@ -184,7 +388,7 @@ router.post('/chat', async (req, res) => {
     if (isApiKeyError) {
       return res.status(503).json({
         error: 'InvalidApiKey',
-        message: 'Study AI requires a valid Google Gemini API key. Please configure a valid GEMINI_API_KEY in your hosting environment (Settings > Secrets or Vercel Environment Variables).',
+        message: 'Study AI requires a valid Google Gemini API key. Please configure GEMINI_API_KEY in your hosting environment.',
       });
     }
 
@@ -196,3 +400,4 @@ router.post('/chat', async (req, res) => {
 });
 
 export default router;
+
