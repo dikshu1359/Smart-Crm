@@ -318,39 +318,6 @@ export const StudentImportantInformation: React.FC = () => {
               {isStudent && 'Your complete official student profile. Keep your personal and parent/guardian contact information up-to-date.'}
             </p>
           </div>
-
-          <div className="flex items-center gap-2">
-            {isStudent && activeStudentToView && !isEditing && (
-              <>
-                <button
-                  type="button"
-                  onClick={() => startEditProfile(activeStudentToView)}
-                  className="px-4 py-2 text-xs font-semibold text-white bg-purple-600 hover:bg-purple-500 rounded-xl transition-all shadow-md shadow-purple-600/30 flex items-center gap-1.5 cursor-pointer"
-                >
-                  <Pencil className="w-3.5 h-3.5" />
-                  <span>Edit Profile</span>
-                </button>
-                <button
-                  type="button"
-                  disabled={Boolean(isExporting)}
-                  onClick={() => handleExportPdf(activeStudentToView)}
-                  className="px-4 py-2 text-xs font-semibold text-white bg-gradient-to-r from-pink-600 to-purple-600 hover:from-pink-500 hover:to-purple-500 rounded-xl transition-all shadow-md shadow-pink-600/30 flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
-                >
-                  {isExporting === (activeStudentToView.id || (activeStudentToView as any)._id) ? (
-                    <>
-                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                      <span>Generating PDF...</span>
-                    </>
-                  ) : (
-                    <>
-                      <Download className="w-3.5 h-3.5" />
-                      <span>Export My Form (PDF)</span>
-                    </>
-                  )}
-                </button>
-              </>
-            )}
-          </div>
         </div>
 
         {/* Global Success / Error Alerts */}

@@ -1,7 +1,14 @@
 import express from 'express';
 import { GoogleGenAI } from '@google/genai';
+import dotenv from 'dotenv';
+import fs from 'fs';
 import { tenantAuth } from '../middleware/tenantAuth.js';
 import dbManager from '../utils/DatabaseManager.js';
+
+dotenv.config();
+if (!process.env.GEMINI_API_KEY && fs.existsSync('.env.example')) {
+  dotenv.config({ path: '.env.example' });
+}
 
 const router = express.Router();
 router.use(tenantAuth);
@@ -66,7 +73,6 @@ async function generateEducationalImage(ai, prompt) {
   let explanation = '';
   let modelUsed = 'gemini-3.1-flash-lite-image';
 
-  // Attempt 1: gemini-3.1-flash-lite-image
   try {
     const res = await ai.models.generateContent({
       model: 'gemini-3.1-flash-lite-image',
@@ -96,27 +102,6 @@ async function generateEducationalImage(ai, prompt) {
     }
   } catch (err) {
     console.warn('[Study AI] gemini-3.1-flash-lite-image attempt:', err.message);
-  }
-
-  // Attempt 2 fallback: imagen-3.0-generate-002
-  if (!imageUrl) {
-    try {
-      const imagenRes = await ai.models.generateImages({
-        model: 'imagen-3.0-generate-002',
-        prompt: `Educational textbook illustration: ${prompt}. High quality, detailed diagram, accurate educational visual.`,
-        config: {
-          numberOfImages: 1,
-          outputMimeType: 'image/jpeg',
-          aspectRatio: '1:1',
-        },
-      });
-      if (imagenRes.generatedImages?.[0]?.image?.imageBytes) {
-        imageUrl = `data:image/jpeg;base64,${imagenRes.generatedImages[0].image.imageBytes}`;
-        modelUsed = 'imagen-3.0-generate-002';
-      }
-    } catch (imgErr) {
-      console.warn('[Study AI] imagen-3.0-generate-002 fallback attempt:', imgErr.message);
-    }
   }
 
   return { imageUrl, explanation, modelUsed };
@@ -195,7 +180,8 @@ router.post('/stream', async (req, res) => {
       });
     }
 
-    const { prompt, history, attachment } = req.body;
+    const prompt = req.body.prompt || req.body.message || req.body.question;
+    const { history, attachment } = req.body;
     if (!prompt || typeof prompt !== 'string' || !prompt.trim()) {
       return res.status(400).json({
         error: 'MissingPrompt',
@@ -211,16 +197,14 @@ router.post('/stream', async (req, res) => {
       });
     }
 
-    // Set headers for Server-Sent Events
-    res.setHeader('Content-Type', 'text/event-stream');
-    res.setHeader('Cache-Control', 'no-cache, no-transform');
-    res.setHeader('Connection', 'keep-alive');
-    if (res.flushHeaders) res.flushHeaders();
-
     // Explicit Image Generation Request
     if (isImageGenerationPrompt(prompt) && (!attachment || !attachment.data)) {
       const { imageUrl, explanation, modelUsed } = await generateEducationalImage(ai, prompt);
       if (imageUrl) {
+        res.setHeader('Content-Type', 'text/event-stream');
+        res.setHeader('Cache-Control', 'no-cache, no-transform');
+        res.setHeader('Connection', 'keep-alive');
+        if (res.flushHeaders) res.flushHeaders();
         res.write(
           `data: ${JSON.stringify({
             event: 'image',
@@ -234,21 +218,62 @@ router.post('/stream', async (req, res) => {
       }
     }
 
-    // Streaming text / multimodal content with gemini-3.8-flash
+    // Set headers for Server-Sent Events
+    res.setHeader('Content-Type', 'text/event-stream');
+    res.setHeader('Cache-Control', 'no-cache, no-transform');
+    res.setHeader('Connection', 'keep-alive');
+    if (res.flushHeaders) res.flushHeaders();
+
     const contents = buildGeminiContents(history, prompt, attachment);
 
-    const streamResponse = await ai.models.generateContentStream({
-      model: 'gemini-3.8-flash',
-      contents,
-      config: {
-        systemInstruction: SYSTEM_INSTRUCTION,
-        temperature: 0.7,
-      },
-    });
+    // Call Gemini with resilient model fallback (gemini-3.1-flash-lite -> gemini-3.8-flash)
+    const candidateModels = ['gemini-3.1-flash-lite', 'gemini-3.8-flash'];
+    let streamSuccess = false;
+    let usedModel = candidateModels[0];
 
-    for await (const chunk of streamResponse) {
-      if (chunk.text) {
-        res.write(`data: ${JSON.stringify({ event: 'chunk', text: chunk.text })}\n\n`);
+    for (const modelCandidate of candidateModels) {
+      try {
+        usedModel = modelCandidate;
+        const streamResponse = await ai.models.generateContentStream({
+          model: modelCandidate,
+          contents,
+          config: {
+            systemInstruction: SYSTEM_INSTRUCTION,
+            temperature: 0.7,
+          },
+        });
+
+        for await (const chunk of streamResponse) {
+          if (chunk.text) {
+            res.write(`data: ${JSON.stringify({ event: 'chunk', text: chunk.text })}\n\n`);
+          }
+        }
+        streamSuccess = true;
+        break;
+      } catch (streamErr) {
+        console.warn(`[Study AI Stream] Model ${modelCandidate} stream error:`, streamErr.message);
+      }
+    }
+
+    if (!streamSuccess) {
+      // Direct generateContent fallback if streaming suffered a demand spike or network interruption
+      try {
+        const directRes = await ai.models.generateContent({
+          model: 'gemini-3.1-flash-lite',
+          contents,
+          config: {
+            systemInstruction: SYSTEM_INSTRUCTION,
+            temperature: 0.7,
+          },
+        });
+        const replyText = directRes.text || directRes.candidates?.[0]?.content?.parts?.[0]?.text || '';
+        if (replyText) {
+          res.write(`data: ${JSON.stringify({ event: 'chunk', text: replyText })}\n\n`);
+          streamSuccess = true;
+        }
+      } catch (fallbackErr) {
+        console.error('[Study AI Stream] Direct fallback failed:', fallbackErr.message);
+        throw fallbackErr;
       }
     }
 
@@ -263,7 +288,7 @@ router.post('/stream', async (req, res) => {
         actorName: req.user?.fullName || req.user?.username,
         actorRole: req.user?.role,
         actionCategory: 'STUDY_AI',
-        description: `Study AI query: "${prompt.slice(0, 60)}${prompt.length > 60 ? '...' : ''}"`,
+        description: `Study AI query (${usedModel}): "${prompt.slice(0, 60)}${prompt.length > 60 ? '...' : ''}"`,
       })
       .catch(() => null);
   } catch (err) {
@@ -274,7 +299,7 @@ router.post('/stream', async (req, res) => {
         message: err.message || 'An error occurred while contacting Study AI.',
       });
     }
-    res.write(`data: ${JSON.stringify({ event: 'error', message: err.message })}\n\n`);
+    res.write(`data: ${JSON.stringify({ event: 'error', message: err.message || 'Stream generation failed.' })}\n\n`);
     res.write('data: [DONE]\n\n');
     res.end();
   }
@@ -295,7 +320,8 @@ router.post('/chat', async (req, res) => {
       });
     }
 
-    const { prompt, history, attachment } = req.body;
+    const prompt = req.body.prompt || req.body.message || req.body.question;
+    const { history, attachment } = req.body;
     if (!prompt || typeof prompt !== 'string' || !prompt.trim()) {
       return res.status(400).json({
         error: 'MissingPrompt',
@@ -326,14 +352,29 @@ router.post('/chat', async (req, res) => {
 
     const contents = buildGeminiContents(history, prompt, attachment);
 
-    const response = await ai.models.generateContent({
-      model: 'gemini-3.8-flash',
-      contents,
-      config: {
-        systemInstruction: SYSTEM_INSTRUCTION,
-        temperature: 0.7,
-      },
-    });
+    let response;
+    let usedModel = 'gemini-3.1-flash-lite';
+    try {
+      response = await ai.models.generateContent({
+        model: 'gemini-3.1-flash-lite',
+        contents,
+        config: {
+          systemInstruction: SYSTEM_INSTRUCTION,
+          temperature: 0.7,
+        },
+      });
+    } catch (primaryErr) {
+      console.warn('[Study AI Chat] Primary model attempt failed, falling back:', primaryErr.message);
+      usedModel = 'gemini-3.8-flash';
+      response = await ai.models.generateContent({
+        model: 'gemini-3.8-flash',
+        contents,
+        config: {
+          systemInstruction: SYSTEM_INSTRUCTION,
+          temperature: 0.7,
+        },
+      });
+    }
 
     const responseText = response.text || 'I could not generate an answer. Please try rephrasing your question.';
 
@@ -345,14 +386,14 @@ router.post('/chat', async (req, res) => {
         actorName: req.user?.fullName || req.user?.username,
         actorRole: req.user?.role,
         actionCategory: 'STUDY_AI',
-        description: `Study AI consultation on: "${prompt.slice(0, 60)}${prompt.length > 60 ? '...' : ''}"`,
+        description: `Study AI consultation (${usedModel}): "${prompt.slice(0, 60)}${prompt.length > 60 ? '...' : ''}"`,
       })
       .catch(() => null);
 
     res.json({
       success: true,
       text: responseText,
-      model: 'gemini-3.8-flash',
+      model: usedModel,
     });
   } catch (err) {
     console.error('[Study AI] Error generating response:', err.message);

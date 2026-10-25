@@ -3,13 +3,22 @@ import express from 'express';
 import { createServer as createViteServer } from 'vite';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import fs from 'fs';
+import dotenv from 'dotenv';
+
+// Load environment variables (.env first, then fallback to .env.example)
+dotenv.config();
+if (!process.env.MONGODB_URI && fs.existsSync('.env.example')) {
+  dotenv.config({ path: '.env.example' });
+}
+
 import app from './backend/server.js';
 import { setupWebSocketServer } from './backend/websocket.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-const PORT = 3000;
+const PORT = Number(process.env.PORT) || 3000;
 
 async function startServer() {
   const httpServer = http.createServer(app);
@@ -38,7 +47,9 @@ async function startServer() {
     const vite = await createViteServer({
       server: {
         middlewareMode: true,
-        hmr: false,
+        hmr: {
+          server: httpServer,
+        },
       },
       appType: 'spa',
     });

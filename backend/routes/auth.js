@@ -82,7 +82,7 @@ router.post('/register-institution', async (req, res) => {
  */
 router.post('/login', async (req, res) => {
   try {
-    const usernameOrEmail = req.body.usernameOrEmail || req.body.username || req.body.email;
+    const usernameOrEmail = req.body.usernameOrEmail || req.body.username || req.body.email || req.body.identifier;
     const password = req.body.password;
     const requestedDatabaseName = req.body.databaseName || req.headers['x-tenant-database'];
 

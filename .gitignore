@@ -1,7 +1,10 @@
 node_modules
 dist
 .env
-.env.local
+.env.*
+!.env.example
+.dev.env.json
+.dev.*
 .DS_Store
 *.log
 bun.lock

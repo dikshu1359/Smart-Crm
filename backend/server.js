@@ -1,6 +1,13 @@
 import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
+import fs from 'fs';
+
+dotenv.config();
+if (!process.env.MONGODB_URI && fs.existsSync('.env.example')) {
+  dotenv.config({ path: '.env.example' });
+}
+
 import dbManager from './utils/DatabaseManager.js';
 import { activityLogger } from './middleware/activityLogger.js';
 
@@ -20,8 +27,6 @@ import attendanceRouter from './routes/attendance.js';
 import marksRouter from './routes/marks.js';
 import callsRouter from './routes/calls.js';
 import aiRouter from './routes/ai.js';
-
-dotenv.config();
 
 const app = express();
 const PORT = process.env.BACKEND_PORT || 5001;
